@@ -43,6 +43,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     var indexing by mutableStateOf(false); private set
 
     var section by mutableStateOf(Section.HOME)
+    var game by mutableStateOf<String?>(null)            // currently open game (null = menu)
     var playing by mutableStateOf<MediaEntry?>(null)     // full-screen video overlay
     var playStartMs by mutableStateOf(0L); private set
     var playStartIndex by mutableStateOf(0); private set

@@ -482,11 +482,6 @@ private fun HomeSection(vm: MainViewModel) {
                 .padding(horizontal = 20.dp, vertical = 18.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Box(
-                Modifier.size(34.dp).clip(RoundedCornerShape(10.dp)).background(BrandBrush),
-                contentAlignment = Alignment.Center
-            ) { Icon(Icons.Filled.PlayArrow, null, tint = Color.White, modifier = Modifier.size(20.dp)) }
-            Spacer(Modifier.width(12.dp))
             Text(
                 "CAR HUB", color = CH.TextPrimary, fontSize = 22.sp, fontWeight = FontWeight.Bold,
                 letterSpacing = 2.sp, modifier = Modifier.weight(1f)
@@ -503,7 +498,7 @@ private fun HomeSection(vm: MainViewModel) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 StatCard("Movies", vm.movies.size, Icons.Filled.Movie, Modifier.weight(1f))
                 StatCard("Songs", vm.songTrackCount, Icons.Filled.MusicNote, Modifier.weight(1f))
-                StatCard("Games", 1, Icons.Filled.SportsEsports, Modifier.weight(1f))
+                StatCard("Games", 3, Icons.Filled.SportsEsports, Modifier.weight(1f))
             }
             Spacer(Modifier.height(20.dp))
 
@@ -960,8 +955,233 @@ private fun subMime(ext: String?): String = when (ext?.lowercase()) {
 @Composable
 private fun GamesSection(vm: MainViewModel) {
     Column(Modifier.fillMaxSize()) {
-        TopBar("GAMES", onBack = { vm.go(Section.HOME) })
-        Box(Modifier.weight(1f).fillMaxWidth()) { TicTacToe() }
+        val g = vm.game
+        if (g == null) {
+            TopBar("GAMES", onBack = { vm.go(Section.HOME) })
+            Box(Modifier.weight(1f).fillMaxWidth()) {
+                LazyVerticalGrid(
+                    columns = GridCells.Adaptive(150.dp),
+                    contentPadding = PaddingValues(20.dp),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    item { FeatureTile("Tic-Tac-Toe", Icons.Filled.SportsEsports, tileGradients[0], Modifier.fillMaxWidth()) { vm.game = "ttt" } }
+                    item { FeatureTile("2048", Icons.Filled.SportsEsports, tileGradients[1], Modifier.fillMaxWidth()) { vm.game = "2048" } }
+                    item { FeatureTile("Snake", Icons.Filled.SportsEsports, tileGradients[2], Modifier.fillMaxWidth()) { vm.game = "snake" } }
+                }
+            }
+        } else {
+            val title = when (g) { "ttt" -> "TIC-TAC-TOE"; "2048" -> "2048"; else -> "SNAKE" }
+            TopBar(title, onBack = { vm.game = null })
+            Box(Modifier.weight(1f).fillMaxWidth()) {
+                when (g) {
+                    "ttt" -> TicTacToe()
+                    "2048" -> Game2048()
+                    else -> SnakeGame()
+                }
+            }
+        }
+    }
+}
+
+// ---------- 2048 ----------
+
+@Composable
+private fun Game2048() {
+    fun fresh() = spawn2048(spawn2048(IntArray(16)))
+    var board by remember { mutableStateOf(fresh()) }
+    var score by remember { mutableStateOf(0) }
+    var over by remember { mutableStateOf(false) }
+
+    fun apply(dir: Int) {
+        if (over) return
+        val (nb, gained, moved) = move2048(board, dir)
+        if (moved) {
+            val withNew = spawn2048(nb)
+            board = withNew
+            score += gained
+            if (isOver2048(withNew)) over = true
+        }
+    }
+
+    Column(
+        Modifier.fillMaxSize().pointerInput(Unit) {
+            var total = Offset.Zero
+            detectDragGestures(
+                onDragStart = { total = Offset.Zero },
+                onDrag = { _, d -> total += d },
+                onDragEnd = {
+                    if (kotlin.math.abs(total.x) > kotlin.math.abs(total.y)) apply(if (total.x > 0) 1 else 3)
+                    else apply(if (total.y > 0) 2 else 0)
+                }
+            )
+        },
+        horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center
+    ) {
+        Text(if (over) "Game over — score $score" else "Score $score", color = CH.TextPrimary, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(16.dp))
+        Column(Modifier.clip(RoundedCornerShape(10.dp)).background(CH.CardAlt).padding(6.dp)) {
+            for (r in 0..3) {
+                Row {
+                    for (c in 0..3) {
+                        val v = board[r * 4 + c]
+                        Box(
+                            Modifier.padding(4.dp).size(64.dp).clip(RoundedCornerShape(8.dp)).background(tile2048Color(v)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (v > 0) Text(
+                                "$v",
+                                color = if (v <= 4) CH.TextSecondary else Color.White,
+                                fontSize = if (v >= 1024) 20.sp else 26.sp, fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        Spacer(Modifier.height(16.dp))
+        Text("Swipe to move tiles", color = CH.TextSecondary, fontSize = 13.sp)
+        Spacer(Modifier.height(12.dp))
+        Button(onClick = { board = fresh(); score = 0; over = false }, colors = btnAccent()) { Text("New Game") }
+    }
+}
+
+private fun slideLeft(line: IntArray): Pair<IntArray, Int> {
+    val nums = line.filter { it != 0 }
+    var score = 0
+    val res = ArrayList<Int>()
+    var i = 0
+    while (i < nums.size) {
+        if (i + 1 < nums.size && nums[i] == nums[i + 1]) {
+            val merged = nums[i] * 2; res.add(merged); score += merged; i += 2
+        } else { res.add(nums[i]); i++ }
+    }
+    while (res.size < 4) res.add(0)
+    return res.toIntArray() to score
+}
+
+private fun move2048(board: IntArray, dir: Int): Triple<IntArray, Int, Boolean> {
+    val out = IntArray(16)
+    var score = 0
+    for (i in 0..3) {
+        val line = when (dir) {
+            3 -> intArrayOf(board[i * 4 + 0], board[i * 4 + 1], board[i * 4 + 2], board[i * 4 + 3])
+            1 -> intArrayOf(board[i * 4 + 3], board[i * 4 + 2], board[i * 4 + 1], board[i * 4 + 0])
+            0 -> intArrayOf(board[0 * 4 + i], board[1 * 4 + i], board[2 * 4 + i], board[3 * 4 + i])
+            else -> intArrayOf(board[3 * 4 + i], board[2 * 4 + i], board[1 * 4 + i], board[0 * 4 + i])
+        }
+        val (slid, s) = slideLeft(line)
+        score += s
+        when (dir) {
+            3 -> for (j in 0..3) out[i * 4 + j] = slid[j]
+            1 -> for (j in 0..3) out[i * 4 + (3 - j)] = slid[j]
+            0 -> for (j in 0..3) out[j * 4 + i] = slid[j]
+            else -> for (j in 0..3) out[(3 - j) * 4 + i] = slid[j]
+        }
+    }
+    return Triple(out, score, !out.contentEquals(board))
+}
+
+private fun spawn2048(board: IntArray): IntArray {
+    val empty = board.indices.filter { board[it] == 0 }
+    if (empty.isEmpty()) return board
+    val b = board.copyOf()
+    b[empty.random()] = if (kotlin.random.Random.nextInt(10) == 0) 4 else 2
+    return b
+}
+
+private fun isOver2048(board: IntArray): Boolean {
+    if (board.any { it == 0 }) return false
+    for (r in 0..3) for (c in 0..3) {
+        val v = board[r * 4 + c]
+        if (c < 3 && board[r * 4 + c + 1] == v) return false
+        if (r < 3 && board[(r + 1) * 4 + c] == v) return false
+    }
+    return true
+}
+
+private fun tile2048Color(v: Int): Color = when (v) {
+    2 -> Color(0xFF3A3A44); 4 -> Color(0xFF4A4458); 8 -> Color(0xFF6C5CE0); 16 -> Color(0xFF7A4FE0)
+    32 -> Color(0xFF2E74B5); 64 -> Color(0xFF12A594); 128 -> Color(0xFFE0913B); 256 -> Color(0xFFE0577A)
+    512 -> Color(0xFFCB356B); 1024 -> Color(0xFFFF512F); else -> if (v == 0) Color(0xFF2A2A31) else Color(0xFFFFB300)
+}
+
+// ---------- Snake ----------
+
+@Composable
+private fun SnakeGame() {
+    val n = 14
+    fun start() = listOf(7 to 7, 7 to 6, 7 to 5)
+    var snake by remember { mutableStateOf(start()) }
+    var dir by remember { mutableStateOf(0 to 1) }   // (dRow, dCol); start moving right
+    var food by remember { mutableStateOf(3 to 10) }
+    var over by remember { mutableStateOf(false) }
+    var score by remember { mutableStateOf(0) }
+
+    LaunchedEffect(over) {
+        if (over) return@LaunchedEffect
+        while (!over) {
+            delay(180)
+            val head = snake.first()
+            val nh = ((head.first + dir.first + n) % n) to ((head.second + dir.second + n) % n)
+            if (snake.contains(nh)) { over = true; break }
+            val grew = nh == food
+            snake = (listOf(nh) + snake).let { if (grew) it else it.dropLast(1) }
+            if (grew) {
+                score += 1
+                var f: Pair<Int, Int>
+                do { f = kotlin.random.Random.nextInt(n) to kotlin.random.Random.nextInt(n) } while (snake.contains(f))
+                food = f
+            }
+        }
+    }
+
+    Column(
+        Modifier.fillMaxSize().pointerInput(Unit) {
+            var total = Offset.Zero
+            detectDragGestures(
+                onDragStart = { total = Offset.Zero },
+                onDrag = { _, d -> total += d },
+                onDragEnd = {
+                    if (kotlin.math.abs(total.x) > kotlin.math.abs(total.y)) {
+                        if (total.x > 0 && dir != (0 to -1)) dir = 0 to 1
+                        else if (total.x < 0 && dir != (0 to 1)) dir = 0 to -1
+                    } else {
+                        if (total.y > 0 && dir != (-1 to 0)) dir = 1 to 0
+                        else if (total.y < 0 && dir != (1 to 0)) dir = -1 to 0
+                    }
+                }
+            )
+        },
+        horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center
+    ) {
+        Text(if (over) "Game over — score $score" else "Score $score", color = CH.TextPrimary, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(16.dp))
+        Canvas(Modifier.size(300.dp).clip(RoundedCornerShape(10.dp)).background(CH.CardAlt)) {
+            val cell = size.width / n
+            drawRect(
+                color = Color(0xFFE0577A),
+                topLeft = Offset(food.second * cell, food.first * cell),
+                size = androidx.compose.ui.geometry.Size(cell, cell)
+            )
+            snake.forEachIndexed { i, seg ->
+                drawRect(
+                    color = if (i == 0) CH.Accent else Color(0xFF6C8CFF),
+                    topLeft = Offset(seg.second * cell + 1f, seg.first * cell + 1f),
+                    size = androidx.compose.ui.geometry.Size(cell - 2f, cell - 2f)
+                )
+            }
+        }
+        Spacer(Modifier.height(16.dp))
+        Text("Swipe to steer", color = CH.TextSecondary, fontSize = 13.sp)
+        if (over) {
+            Spacer(Modifier.height(12.dp))
+            Button(
+                onClick = { snake = start(); dir = 0 to 1; food = 3 to 10; score = 0; over = false },
+                colors = btnAccent()
+            ) { Text("New Game") }
+        }
     }
 }
 

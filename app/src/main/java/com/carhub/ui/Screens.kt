@@ -96,6 +96,10 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.material.icons.filled.BatteryFull
 import androidx.compose.material.icons.filled.Bluetooth
+import androidx.compose.material.icons.filled.BrightnessAuto
+import androidx.compose.material.icons.filled.DarkMode
+import androidx.compose.material.icons.filled.LightMode
+import androidx.compose.material3.Slider
 import androidx.compose.material.icons.filled.BluetoothDisabled
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Favorite
@@ -328,8 +332,14 @@ private fun RailItem(vm: MainViewModel, s: Section, icon: ImageVector, label: St
 
 // ---------- Home ----------
 
+private fun brightnessIcon(b: Float): ImageVector = when {
+    b < 0f -> Icons.Filled.BrightnessAuto
+    b > 0.2f -> Icons.Filled.LightMode
+    else -> Icons.Filled.DarkMode
+}
+
 @Composable
-private fun StatusCluster() {
+private fun StatusCluster(vm: MainViewModel) {
     val context = LocalContext.current
     var pct by remember { mutableStateOf<Int?>(null) }
     var charging by remember { mutableStateOf(false) }
@@ -375,6 +385,10 @@ private fun StatusCluster() {
         }
     }
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+        Icon(
+            brightnessIcon(vm.brightness), "Brightness",
+            tint = CH.TextSecondary, modifier = Modifier.size(20.dp).clickable { vm.cycleBrightness() }
+        )
         if (clock.isNotEmpty()) Text(clock, color = CH.TextSecondary, fontSize = 14.sp)
         if (bt != null) {
             Icon(
@@ -411,7 +425,7 @@ private fun HomeSection(vm: MainViewModel) {
                 "CAR HUB", color = CH.TextPrimary, fontSize = 22.sp, fontWeight = FontWeight.Bold,
                 letterSpacing = 2.sp, modifier = Modifier.weight(1f)
             )
-            StatusCluster()
+            StatusCluster(vm)
         }
         Column(Modifier.padding(20.dp)) {
             Text(
@@ -942,6 +956,20 @@ private fun SettingsSection(vm: MainViewModel) {
                     "Full lockdown needs one-time provisioning — see the build guide.",
                 color = CH.TextSecondary, fontSize = 13.sp
             )
+            HorizontalDivider(color = CH.Divider)
+            Text("Screen brightness", color = CH.TextPrimary, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+            Text("Tap the brightness icon on Home to cycle Day → Dim → Night.", color = CH.TextSecondary, fontSize = 13.sp)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Filled.DarkMode, null, tint = CH.TextSecondary, modifier = Modifier.size(20.dp))
+                Slider(
+                    value = if (vm.brightness < 0f) 1f else vm.brightness,
+                    onValueChange = { vm.setBrightness(it.coerceIn(0.05f, 1f)) },
+                    valueRange = 0.05f..1f,
+                    modifier = Modifier.weight(1f).padding(horizontal = 8.dp)
+                )
+                Icon(Icons.Filled.LightMode, null, tint = CH.TextSecondary, modifier = Modifier.size(20.dp))
+            }
+            Button(onClick = { vm.setBrightness(-1f) }, colors = btnPlain()) { Text("Use system brightness") }
             HorizontalDivider(color = CH.Divider)
             Text("Change Owner PIN", color = CH.TextPrimary, fontWeight = FontWeight.Bold, fontSize = 18.sp)
             OutlinedTextField(

@@ -5,6 +5,7 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
@@ -23,6 +24,7 @@ class Prefs(private val context: Context) {
         private val FAVORITES = stringSetPreferencesKey("favorites")
         private val RESUME = stringPreferencesKey("resume_json")
         private val KIDS = stringSetPreferencesKey("kids_categories")
+        private val BRIGHTNESS = floatPreferencesKey("brightness")
     }
 
     val pinHash: Flow<String?> = context.dataStore.data.map { it[PIN] }
@@ -32,6 +34,7 @@ class Prefs(private val context: Context) {
     val favorites: Flow<Set<String>> = context.dataStore.data.map { it[FAVORITES] ?: emptySet() }
     val resumeJson: Flow<String> = context.dataStore.data.map { it[RESUME] ?: "{}" }
     val kidsCategories: Flow<Set<String>> = context.dataStore.data.map { it[KIDS] ?: emptySet() }
+    val brightness: Flow<Float> = context.dataStore.data.map { it[BRIGHTNESS] ?: -1f }
 
     suspend fun setPin(hash: String) {
         context.dataStore.edit { it[PIN] = hash }
@@ -59,5 +62,9 @@ class Prefs(private val context: Context) {
 
     suspend fun setKidsCategories(value: Set<String>) {
         context.dataStore.edit { it[KIDS] = value }
+    }
+
+    suspend fun setBrightness(value: Float) {
+        context.dataStore.edit { it[BRIGHTNESS] = value }
     }
 }

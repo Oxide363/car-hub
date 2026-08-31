@@ -48,6 +48,13 @@ class MainActivity : ComponentActivity() {
                             if (vm.mode == Mode.PASSENGER) Kiosk.startLock(this@MainActivity)
                             else Kiosk.stopLock(this@MainActivity)
                         }
+                        LaunchedEffect(vm.brightness) {
+                            val lp = window.attributes
+                            lp.screenBrightness =
+                                if (vm.brightness < 0f) WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
+                                else vm.brightness
+                            window.attributes = lp
+                        }
                         BackHandler {
                             when {
                                 vm.askExitPin -> vm.askExitPin = false

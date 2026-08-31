@@ -49,6 +49,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     var favorites by mutableStateOf<Set<String>>(emptySet()); private set
     var kidsCategories by mutableStateOf<Set<String>>(emptySet()); private set
+    var brightness by mutableStateOf(-1f); private set   // -1 = system; else 0.05..1.0
     var continueList by mutableStateOf<List<MediaEntry>>(emptyList()); private set
 
     // Shared audio player — survives section changes so music keeps playing.
@@ -67,6 +68,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             tier = Kiosk.tier(getApplication())
             favorites = prefs.favorites.first()
             kidsCategories = prefs.kidsCategories.first()
+            brightness = prefs.brightness.first()
             loadResume(prefs.resumeJson.first())
             loaded = true
             treeUri?.let { reindex(it) }
@@ -274,6 +276,22 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun toggleKidsCategory(cat: String) {
         kidsCategories = if (cat in kidsCategories) kidsCategories - cat else kidsCategories + cat
         viewModelScope.launch { prefs.setKidsCategories(kidsCategories) }
+    }
+
+    // ----- screen brightness (per-app window; no system permission needed) -----
+    fun setBrightness(v: Float) {
+        brightness = v
+        viewModelScope.launch { prefs.setBrightness(v) }
+    }
+
+    /** Cycles System → Dim → Night → System. */
+    fun cycleBrightness() {
+        val next = when {
+            brightness < 0f -> 0.35f
+            brightness > 0.2f -> 0.10f
+            else -> -1f
+        }
+        setBrightness(next)
     }
 
     // ----- mode -----

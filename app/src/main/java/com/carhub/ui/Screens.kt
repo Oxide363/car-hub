@@ -117,7 +117,6 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.ui.draw.scale
 import com.carhub.data.Thumbs
-import org.mapsforge.map.rendertheme.`internal`.MapsforgeThemes
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
@@ -872,56 +871,14 @@ private fun MapsSection(vm: MainViewModel) {
     Column(Modifier.fillMaxSize()) {
         TopBar("MAPS", onBack = { vm.go(Section.HOME) })
         Box(Modifier.weight(1f).fillMaxWidth()) {
-            val region = vm.mapRegions.firstOrNull()
-            if (region == null) {
-                EmptyBox(
-                    "No offline map found.\n\nOwner: put an OpenStreetMap .map file (Mapsforge format) in " +
-                        "CARHUB/Maps and tap Rescan. Free region files: download.mapsforge.org."
-                )
-            } else {
-                MapsforgeView(region.uri)
-            }
+            val n = vm.mapRegions.size
+            EmptyBox(
+                "Offline maps are a planned add-on for a future update.\n\n" +
+                    if (n > 0) "Detected $n offline map file(s) in CARHUB/Maps — they'll light up when Maps ships."
+                    else "Drop OpenStreetMap .map files in CARHUB/Maps and they'll be ready when Maps ships."
+            )
         }
     }
-}
-
-@Composable
-private fun MapsforgeView(uri: String) {
-    AndroidView(
-        modifier = Modifier.fillMaxSize(),
-        factory = { ctx ->
-            if (org.mapsforge.map.android.graphics.AndroidGraphicFactory.INSTANCE == null) {
-                org.mapsforge.map.android.graphics.AndroidGraphicFactory
-                    .createInstance(ctx.applicationContext as android.app.Application)
-            }
-            val mapView = org.mapsforge.map.android.view.MapView(ctx)
-            mapView.mapScaleBar.isVisible = true
-            mapView.setBuiltInZoomControls(true)
-            try {
-                val ins = ctx.contentResolver.openInputStream(android.net.Uri.parse(uri))
-                if (ins is java.io.FileInputStream) {
-                    val store = org.mapsforge.map.reader.MapFile(ins)
-                    val cache = org.mapsforge.map.android.util.AndroidUtil.createTileCache(
-                        ctx, "carhub_map",
-                        mapView.model.displayModel.tileSize, 1f,
-                        mapView.model.frameBufferModel.overdrawFactor
-                    )
-                    val layer = org.mapsforge.map.layer.renderer.TileRendererLayer(
-                        cache, store, mapView.model.mapViewPosition,
-                        org.mapsforge.map.android.graphics.AndroidGraphicFactory.INSTANCE
-                    )
-                    layer.setXmlRenderTheme(MapsforgeThemes.MOTORIDER)
-                    mapView.layerManager.layers.add(layer)
-                    mapView.setCenter(store.boundingBox().centerPoint)
-                    mapView.setZoomLevel(12.toByte())
-                }
-            } catch (e: Exception) {
-                // Unreadable/unsupported .map file — show an empty map rather than crash.
-            }
-            mapView
-        },
-        onRelease = { mv -> try { mv.destroyAll() } catch (e: Exception) { } }
-    )
 }
 
 @Composable

@@ -22,6 +22,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items as gridItems
@@ -245,13 +247,80 @@ fun CarHubShell(vm: MainViewModel) {
                 if (vm.nowPlaying != null) NowPlayingBar(vm)
             }
         }
+        vm.viewingCollection?.let { CollectionScreen(vm, it) }
+        vm.viewingAlbum?.let { AlbumScreen(vm, it) }
         vm.playing?.let { entry ->
             PlayerOverlay(
-                m = entry, startMs = vm.playStartMs, brightness = vm.brightness,
+                m = entry, startMs = vm.playStartMs, startIndex = vm.playStartIndex, brightness = vm.brightness,
                 onBrightness = { vm.updateBrightness(it) },
                 onProgress = { pos, dur -> vm.recordResume(entry, pos, dur) },
                 onClose = { vm.playing = null }
             )
+        }
+    }
+}
+
+@Composable
+private fun CollectionScreen(vm: MainViewModel, collection: MediaEntry) {
+    Column(Modifier.fillMaxSize().background(CH.Bg)) {
+        TopBar(collection.title, onBack = { vm.viewingCollection = null })
+        LazyColumn(Modifier.fillMaxSize()) {
+            itemsIndexed(collection.episodes) { i, ep ->
+                Row(
+                    Modifier.fillMaxWidth().clickable { vm.openEpisode(collection, i) }
+                        .padding(horizontal = 20.dp, vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("${i + 1}", color = CH.TextSecondary, fontSize = 15.sp, modifier = Modifier.width(28.dp))
+                    Icon(Icons.Filled.PlayArrow, null, tint = CH.Accent, modifier = Modifier.size(22.dp))
+                    Spacer(Modifier.width(12.dp))
+                    Text(
+                        ep.title, color = CH.TextPrimary, fontSize = 16.sp, modifier = Modifier.weight(1f),
+                        maxLines = 1, overflow = TextOverflow.Ellipsis
+                    )
+                    if (ep.durationLabel.isNotEmpty()) {
+                        Text(ep.durationLabel, color = CH.TextSecondary, fontSize = 13.sp)
+                    }
+                }
+                HorizontalDivider(color = CH.Divider)
+            }
+        }
+    }
+}
+
+@Composable
+private fun AlbumScreen(vm: MainViewModel, album: MediaEntry) {
+    Column(Modifier.fillMaxSize().background(CH.Bg)) {
+        TopBar(album.title, onBack = { vm.viewingAlbum = null })
+        LazyColumn(Modifier.fillMaxSize()) {
+            itemsIndexed(album.episodes) { i, track ->
+                Row(
+                    Modifier.fillMaxWidth().clickable { vm.playAlbum(album, i) }
+                        .padding(horizontal = 20.dp, vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    val art = rememberThumb(track)
+                    Box(
+                        Modifier.size(44.dp).clip(RoundedCornerShape(8.dp)).background(CH.CardAlt),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (art != null) {
+                            Image(bitmap = art, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+                        } else {
+                            Icon(Icons.Filled.MusicNote, null, tint = CH.Accent, modifier = Modifier.size(22.dp))
+                        }
+                    }
+                    Spacer(Modifier.width(16.dp))
+                    Text(
+                        track.title, color = CH.TextPrimary, fontSize = 16.sp, modifier = Modifier.weight(1f),
+                        maxLines = 1, overflow = TextOverflow.Ellipsis
+                    )
+                    if (track.durationLabel.isNotEmpty()) {
+                        Text(track.durationLabel, color = CH.TextSecondary, fontSize = 13.sp)
+                    }
+                }
+                HorizontalDivider(color = CH.Divider)
+            }
         }
     }
 }
@@ -433,7 +502,7 @@ private fun HomeSection(vm: MainViewModel) {
             Spacer(Modifier.height(16.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 StatCard("Movies", vm.movies.size, Icons.Filled.Movie, Modifier.weight(1f))
-                StatCard("Songs", vm.songs.size, Icons.Filled.MusicNote, Modifier.weight(1f))
+                StatCard("Songs", vm.songTrackCount, Icons.Filled.MusicNote, Modifier.weight(1f))
                 StatCard("Games", 1, Icons.Filled.SportsEsports, Modifier.weight(1f))
             }
             Spacer(Modifier.height(20.dp))
@@ -580,7 +649,9 @@ private fun MoviesSection(vm: MainViewModel) {
                     modifier = Modifier.fillMaxSize()
                 ) {
                     gridItems(filtered) { m ->
-                        PosterCard(m, vm.isFavorite(m.uri), { vm.toggleFavorite(m.uri) }) { vm.openMovie(m) }
+                        PosterCard(m, vm.isFavorite(m.uri), { vm.toggleFavorite(m.uri) }) {
+                            if (m.isCollection) vm.openCollection(m) else vm.openMovie(m)
+                        }
                     }
                 }
             }
@@ -641,13 +712,18 @@ private fun PosterCard(m: MediaEntry, isFav: Boolean, onToggleFav: () -> Unit, o
                     modifier = Modifier.size(48.dp)
                 )
             }
-            if (m.isMultiPart) {
+            val badge = when {
+                m.isCollection -> "${m.episodes.size} eps"
+                m.isMultiPart -> "${m.partUris.size} parts"
+                else -> null
+            }
+            if (badge != null) {
                 Box(
                     Modifier.align(Alignment.TopEnd).padding(6.dp)
                         .clip(RoundedCornerShape(6.dp)).background(Color(0xCC000000))
                         .padding(horizontal = 6.dp, vertical = 2.dp)
                 ) {
-                    Text("${m.partUris.size} parts", color = Color.White, fontSize = 11.sp)
+                    Text(badge, color = Color.White, fontSize = 11.sp)
                 }
             }
             Box(
@@ -679,23 +755,23 @@ private fun MusicSection(vm: MainViewModel) {
     Column(Modifier.fillMaxSize()) {
         TopBar("MUSIC", onBack = { vm.go(Section.HOME) })
         Box(Modifier.weight(1f).fillMaxWidth()) {
-            val songs = vm.songs
+            val albums = vm.songs
             when {
                 vm.indexing -> LoadingBox()
-                songs.isEmpty() -> EmptyBox(
+                albums.isEmpty() -> EmptyBox(
                     "No music found.\n\nAdd audio files under your CARHUB folder " +
                         "(e.g. CARHUB/Music/Telugu), then Rescan in Owner → Manage Content."
                 )
                 else -> LazyColumn(Modifier.fillMaxSize()) {
-                    items(songs) { s ->
+                    items(albums) { album ->
                         Row(
-                            Modifier.fillMaxWidth().clickable { vm.playAudio(s) }
+                            Modifier.fillMaxWidth().clickable { vm.openAlbum(album) }
                                 .padding(horizontal = 20.dp, vertical = 14.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            val art = rememberThumb(s)
+                            val art = rememberThumb(album.episodes.firstOrNull() ?: album)
                             Box(
-                                Modifier.size(44.dp).clip(RoundedCornerShape(8.dp)).background(CH.CardAlt),
+                                Modifier.size(48.dp).clip(RoundedCornerShape(8.dp)).background(CH.CardAlt),
                                 contentAlignment = Alignment.Center
                             ) {
                                 if (art != null) {
@@ -704,19 +780,18 @@ private fun MusicSection(vm: MainViewModel) {
                                         contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize()
                                     )
                                 } else {
-                                    Icon(Icons.Filled.MusicNote, null, tint = CH.Accent, modifier = Modifier.size(22.dp))
+                                    Icon(Icons.Filled.MusicNote, null, tint = CH.Accent, modifier = Modifier.size(24.dp))
                                 }
                             }
                             Spacer(Modifier.width(16.dp))
                             Column(Modifier.weight(1f)) {
-                                Text(s.title, color = CH.TextPrimary, fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                if (s.category.isNotBlank()) {
-                                    Text(s.category, color = CH.TextSecondary, fontSize = 12.sp)
-                                }
+                                Text(album.title, color = CH.TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Text(
+                                    "${album.episodes.size} track" + if (album.episodes.size == 1) "" else "s",
+                                    color = CH.TextSecondary, fontSize = 13.sp
+                                )
                             }
-                            if (s.durationLabel.isNotEmpty()) {
-                                Text(s.durationLabel, color = CH.TextSecondary, fontSize = 13.sp)
-                            }
+                            Icon(Icons.Filled.ChevronRight, null, tint = CH.TextSecondary, modifier = Modifier.size(22.dp))
                         }
                         HorizontalDivider(color = CH.Divider)
                     }
@@ -731,7 +806,7 @@ private fun MusicSection(vm: MainViewModel) {
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 @Composable
 private fun PlayerOverlay(
-    m: MediaEntry, startMs: Long, brightness: Float,
+    m: MediaEntry, startMs: Long, startIndex: Int, brightness: Float,
     onBrightness: (Float) -> Unit, onProgress: (Long, Long) -> Unit, onClose: () -> Unit
 ) {
     val context = LocalContext.current
@@ -744,17 +819,24 @@ private fun PlayerOverlay(
     val speeds = listOf(0.5f, 1f, 1.25f, 1.5f, 2f)
     val player = remember {
         ExoPlayer.Builder(context).build().apply {
-            val items = m.playUris.mapIndexed { i, u ->
+            fun buildItem(u: String, subUri: String?, subExt: String?): MediaItem {
                 val b = MediaItem.Builder().setUri(Uri.parse(u))
-                if (i == 0 && m.subtitleUri != null) {
-                    val cfg = MediaItem.SubtitleConfiguration.Builder(Uri.parse(m.subtitleUri))
-                        .setMimeType(subMime(m.subtitleExt))
+                if (subUri != null) {
+                    val cfg = MediaItem.SubtitleConfiguration.Builder(Uri.parse(subUri))
+                        .setMimeType(subMime(subExt))
                         .setLanguage("und")
                         .setSelectionFlags(C.SELECTION_FLAG_DEFAULT)
                         .build()
                     b.setSubtitleConfigurations(listOf(cfg))
                 }
-                b.build()
+                return b.build()
+            }
+            val items = if (m.episodes.isNotEmpty()) {
+                m.episodes.map { buildItem(it.uri, it.subtitleUri, it.subtitleExt) }
+            } else {
+                m.playUris.mapIndexed { i, u ->
+                    buildItem(u, if (i == 0) m.subtitleUri else null, if (i == 0) m.subtitleExt else null)
+                }
             }
             setMediaItems(items)
             addListener(object : Player.Listener {
@@ -763,7 +845,7 @@ private fun PlayerOverlay(
                 }
             })
             prepare()
-            if (startMs > 0) seekTo(startMs)
+            if (startIndex > 0 || startMs > 0) seekTo(startIndex, startMs)
             playWhenReady = true
         }
     }
@@ -805,7 +887,7 @@ private fun PlayerOverlay(
                 )
                 Spacer(Modifier.width(16.dp))
                 Text(
-                    m.title + if (m.isMultiPart) "  (${m.partUris.size} parts)" else "",
+                    m.title,
                     color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold,
                     modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis
                 )
@@ -970,7 +1052,9 @@ private fun KidsSection(vm: MainViewModel) {
                     modifier = Modifier.fillMaxSize()
                 ) {
                     gridItems(kidMovies) { m ->
-                        PosterCard(m, vm.isFavorite(m.uri), { vm.toggleFavorite(m.uri) }) { vm.openMovie(m) }
+                        PosterCard(m, vm.isFavorite(m.uri), { vm.toggleFavorite(m.uri) }) {
+                            if (m.isCollection) vm.openCollection(m) else vm.openMovie(m)
+                        }
                     }
                 }
             }

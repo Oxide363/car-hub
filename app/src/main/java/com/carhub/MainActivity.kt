@@ -57,6 +57,8 @@ class MainActivity : ComponentActivity() {
                             when {
                                 vm.askExitPin -> vm.askExitPin = false
                                 vm.playing != null -> vm.playing = null
+                                vm.viewingAlbum != null -> vm.viewingAlbum = null
+                                vm.viewingCollection != null -> vm.viewingCollection = null
                                 vm.section != Section.HOME -> vm.go(Section.HOME)
                                 vm.mode == Mode.OWNER -> finish()
                                 else -> { /* passenger at Home: stay put */ }

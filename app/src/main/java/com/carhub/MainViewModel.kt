@@ -45,6 +45,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     var section by mutableStateOf(Section.HOME)
     var playing by mutableStateOf<MediaEntry?>(null)     // full-screen video overlay
     var playStartMs by mutableStateOf(0L); private set
+    var playStartIndex by mutableStateOf(0); private set
+    var viewingCollection by mutableStateOf<MediaEntry?>(null)  // TV series episode list
+    var viewingAlbum by mutableStateOf<MediaEntry?>(null)       // music album track list
     var askExitPin by mutableStateOf(false)
 
     var favorites by mutableStateOf<Set<String>>(emptySet()); private set
@@ -179,7 +182,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun rescan() { treeUri?.let { reindex(it) } }
 
     val movies: List<MediaEntry> get() = media.filter { it.type == MediaType.VIDEO }
-    val songs: List<MediaEntry> get() = media.filter { it.type == MediaType.AUDIO }
+    val songs: List<MediaEntry> get() = media.filter { it.type == MediaType.AUDIO }  // albums
+    val songTrackCount: Int get() = songs.sumOf { if (it.isCollection) it.episodes.size else 1 }
 
     fun kidsMovies(): List<MediaEntry> =
         if (kidsCategories.isEmpty()) emptyList() else movies.filter { it.category in kidsCategories }
@@ -194,9 +198,25 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     // ----- video -----
     fun openMovie(e: MediaEntry) {
+        playStartIndex = 0
         playStartMs = resume[e.uri]?.get(0) ?: 0L
         playing = e
     }
+
+    fun openCollection(c: MediaEntry) { viewingCollection = c }
+
+    fun openEpisode(collection: MediaEntry, index: Int) {
+        val ep = collection.episodes.getOrNull(index) ?: return
+        playStartIndex = index
+        playStartMs = resume[ep.uri]?.get(0) ?: 0L
+        // Carry the whole series as the play queue so each episode keeps its own subtitle.
+        playing = MediaEntry(
+            uri = ep.uri, name = ep.name, type = MediaType.VIDEO, folder = ep.folder,
+            episodes = collection.episodes
+        )
+    }
+
+    fun openAlbum(a: MediaEntry) { viewingAlbum = a }
 
     fun recordResume(entry: MediaEntry, pos: Long, dur: Long) {
         if (pos <= 0) return
@@ -228,7 +248,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private fun refreshContinue() {
-        val byUri = media.associateBy { it.uri }
+        val byUri = HashMap<String, MediaEntry>()
+        for (m in media) {
+            byUri[m.uri] = m
+            for (e in m.episodes) byUri[e.uri] = e
+        }
         continueList = resume.entries
             .filter { it.value[0] > 3000 && (it.value[1] <= 0 || it.value[0] < it.value[1] - 5000) }
             .sortedByDescending { it.value[2] }
@@ -237,11 +261,16 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     // ----- audio -----
+    private var audioQueue: List<MediaEntry> = emptyList()
+
     private fun ensureAudio(): ExoPlayer {
         audio?.let { return it }
         val p = ExoPlayer.Builder(getApplication<Application>()).build()
         p.addListener(object : Player.Listener {
             override fun onIsPlayingChanged(isPlaying: Boolean) { audioIsPlaying = isPlaying }
+            override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+                audioQueue.getOrNull(p.currentMediaItemIndex)?.let { nowPlaying = it.title }
+            }
         })
         audio = p
         return p
@@ -249,10 +278,20 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun playAudio(e: MediaEntry) {
         val p = ensureAudio()
+        audioQueue = listOf(e)
         p.setMediaItem(MediaItem.fromUri(Uri.parse(e.uri)))
         p.prepare()
         p.play()
         nowPlaying = e.title
+    }
+
+    fun playAlbum(album: MediaEntry, index: Int) {
+        val p = ensureAudio()
+        audioQueue = album.episodes
+        p.setMediaItems(album.episodes.map { MediaItem.fromUri(Uri.parse(it.uri)) }, index, 0L)
+        p.prepare()
+        p.play()
+        nowPlaying = album.episodes.getOrNull(index)?.title ?: album.title
     }
 
     fun toggleAudio() {

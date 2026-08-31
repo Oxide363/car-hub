@@ -16,12 +16,16 @@ data class MediaEntry(
     val durationMs: Long = 0L,
     val subtitleUri: String? = null,   // sidecar .srt/.vtt/.ass next to a video
     val subtitleExt: String? = null,
-    val partUris: List<String> = emptyList()  // >1 => multi-part movie, played as a queue
+    val partUris: List<String> = emptyList(),  // >1 => multi-part movie, played as one queue
+    val episodes: List<MediaEntry> = emptyList() // non-empty => a collection (TV series / music album)
 ) {
     /** URIs to play, in order (single file, or all parts of a multi-part movie). */
     val playUris: List<String> get() = if (partUris.isEmpty()) listOf(uri) else partUris
 
     val isMultiPart: Boolean get() = partUris.size > 1
+
+    /** True for a browsable collection: a TV series (episodes) or a music album (tracks). */
+    val isCollection: Boolean get() = episodes.isNotEmpty()
 
     /** Display title without file extension. */
     val title: String get() = name.substringBeforeLast('.', name)

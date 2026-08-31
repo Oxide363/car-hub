@@ -16,6 +16,11 @@ object CH {
     val TextSecondary = Color(0xFF9A9AA5)
     val Accent = Color(0xFF3B82F6)
     val Divider = Color(0xFF2A2A31)
+
+    // Brand gradient endpoints for the fancy surfaces.
+    val GradA = Color(0xFF2E74B5)
+    val GradB = Color(0xFF7A4FE0)
+    val Glow = Color(0xFF1B2A4A)
 }
 
 private val CarHubColors = darkColorScheme(

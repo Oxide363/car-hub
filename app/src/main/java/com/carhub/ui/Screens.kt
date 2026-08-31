@@ -103,6 +103,12 @@ import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.ui.draw.scale
 import com.carhub.data.Thumbs
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -190,6 +196,22 @@ private fun TopBar(title: String, onBack: (() -> Unit)?, onSearch: (() -> Unit)?
     }
 }
 
+// ---------- brand surfaces ----------
+
+private val BrandBrush = Brush.linearGradient(listOf(CH.GradA, CH.GradB))
+
+private val tileGradients = listOf(
+    listOf(Color(0xFF2E74B5), Color(0xFF1B3A6B)),
+    listOf(Color(0xFF7A4FE0), Color(0xFF3B2A73)),
+    listOf(Color(0xFF12A594), Color(0xFF0C5C55)),
+    listOf(Color(0xFFE0577A), Color(0xFF7A2B45)),
+    listOf(Color(0xFFE0913B), Color(0xFF7A4E1B))
+)
+
+private class HomeTile(
+    val label: String, val icon: ImageVector, val section: Section, val grad: List<Color>
+)
+
 // ---------- shell + navigation rail ----------
 
 @Composable
@@ -248,10 +270,15 @@ private fun CarHubRail(vm: MainViewModel) {
         containerColor = CH.Rail,
         header = {
             Spacer(Modifier.height(14.dp))
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("Car", color = CH.TextPrimary, fontSize = 22.sp, fontWeight = FontWeight.Bold)
-                Text("Hub", color = CH.TextPrimary, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+            Box(
+                Modifier.size(48.dp).clip(RoundedCornerShape(14.dp)).background(BrandBrush),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(Icons.Filled.PlayArrow, null, tint = Color.White, modifier = Modifier.size(26.dp))
             }
+            Spacer(Modifier.height(8.dp))
+            Text("Car", color = CH.TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            Text("Hub", color = CH.TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(20.dp))
         }
     ) {
@@ -364,12 +391,19 @@ private fun StatusCluster() {
 private fun HomeSection(vm: MainViewModel) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
         Row(
-            Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 16.dp),
+            Modifier.fillMaxWidth()
+                .background(Brush.verticalGradient(listOf(CH.GradB.copy(alpha = 0.22f), Color.Transparent)))
+                .padding(horizontal = 20.dp, vertical = 18.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            Box(
+                Modifier.size(34.dp).clip(RoundedCornerShape(10.dp)).background(BrandBrush),
+                contentAlignment = Alignment.Center
+            ) { Icon(Icons.Filled.PlayArrow, null, tint = Color.White, modifier = Modifier.size(20.dp)) }
+            Spacer(Modifier.width(12.dp))
             Text(
                 "CAR HUB", color = CH.TextPrimary, fontSize = 22.sp, fontWeight = FontWeight.Bold,
-                letterSpacing = 1.sp, modifier = Modifier.weight(1f)
+                letterSpacing = 2.sp, modifier = Modifier.weight(1f)
             )
             StatusCluster()
         }
@@ -382,19 +416,19 @@ private fun HomeSection(vm: MainViewModel) {
             Spacer(Modifier.height(20.dp))
 
             val tiles = listOf(
-                Triple("Movies", Icons.Filled.Movie, Section.MOVIES),
-                Triple("Music", Icons.Filled.MusicNote, Section.MUSIC),
-                Triple("Games", Icons.Filled.SportsEsports, Section.GAMES),
-                Triple("Maps", Icons.Filled.Map, Section.MAPS),
-                Triple("Kids", Icons.Filled.ChildCare, Section.KIDS)
+                HomeTile("Movies", Icons.Filled.Movie, Section.MOVIES, tileGradients[0]),
+                HomeTile("Music", Icons.Filled.MusicNote, Section.MUSIC, tileGradients[1]),
+                HomeTile("Games", Icons.Filled.SportsEsports, Section.GAMES, tileGradients[2]),
+                HomeTile("Maps", Icons.Filled.Map, Section.MAPS, tileGradients[3]),
+                HomeTile("Kids", Icons.Filled.ChildCare, Section.KIDS, tileGradients[4])
             )
             tiles.chunked(3).forEach { row ->
                 Row(
                     Modifier.fillMaxWidth().padding(bottom = 16.dp),
                     horizontalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    row.forEach { (label, icon, sec) ->
-                        FeatureTile(label, icon, Modifier.weight(1f)) { vm.go(sec) }
+                    row.forEach { t ->
+                        FeatureTile(t.label, t.icon, t.grad, Modifier.weight(1f)) { vm.go(t.section) }
                     }
                     repeat(3 - row.size) { Spacer(Modifier.weight(1f)) }
                 }
@@ -430,15 +464,22 @@ private fun HomeSection(vm: MainViewModel) {
 }
 
 @Composable
-private fun FeatureTile(label: String, icon: ImageVector, modifier: Modifier = Modifier, onClick: () -> Unit) {
+private fun FeatureTile(
+    label: String, icon: ImageVector, grad: List<Color>, modifier: Modifier = Modifier, onClick: () -> Unit
+) {
     Box(
-        modifier.height(120.dp).clip(RoundedCornerShape(16.dp)).background(CH.Card).clickable { onClick() },
-        contentAlignment = Alignment.Center
+        modifier.height(130.dp).clip(RoundedCornerShape(20.dp))
+            .background(Brush.linearGradient(grad)).clickable { onClick() }
     ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Icon(icon, label, tint = CH.Accent, modifier = Modifier.size(40.dp))
-            Spacer(Modifier.height(10.dp))
-            Text(label, color = CH.TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+        Column(
+            Modifier.fillMaxSize().padding(16.dp),
+            verticalArrangement = Arrangement.SpaceBetween
+        ) {
+            Box(
+                Modifier.size(44.dp).clip(CircleShape).background(Color(0x33FFFFFF)),
+                contentAlignment = Alignment.Center
+            ) { Icon(icon, label, tint = Color.White, modifier = Modifier.size(26.dp)) }
+            Text(label, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
         }
     }
 }
@@ -919,8 +960,28 @@ private fun SettingsSection(vm: MainViewModel) {
 
 @Composable
 fun SplashScreen() {
-    Box(Modifier.fillMaxSize().background(CH.Bg), contentAlignment = Alignment.Center) {
-        Text("CAR HUB", color = CH.TextPrimary, fontSize = 40.sp, fontWeight = FontWeight.Bold, letterSpacing = 4.sp)
+    val transition = rememberInfiniteTransition(label = "splash")
+    val scale by transition.animateFloat(
+        initialValue = 0.94f, targetValue = 1.06f,
+        animationSpec = infiniteRepeatable(tween(1200), RepeatMode.Reverse), label = "scale"
+    )
+    Box(
+        Modifier.fillMaxSize()
+            .background(Brush.radialGradient(listOf(CH.Glow, CH.Bg), radius = 1100f)),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Box(
+                Modifier.size(100.dp).scale(scale).clip(RoundedCornerShape(28.dp)).background(BrandBrush),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(Icons.Filled.PlayArrow, null, tint = Color.White, modifier = Modifier.size(54.dp))
+            }
+            Spacer(Modifier.height(22.dp))
+            Text("CAR HUB", color = CH.TextPrimary, fontSize = 34.sp, fontWeight = FontWeight.Bold, letterSpacing = 6.sp)
+            Spacer(Modifier.height(6.dp))
+            Text("in-car entertainment", color = CH.TextSecondary, fontSize = 13.sp, letterSpacing = 2.sp)
+        }
     }
 }
 

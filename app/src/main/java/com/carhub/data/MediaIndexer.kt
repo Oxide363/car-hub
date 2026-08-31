@@ -11,7 +11,7 @@ import androidx.documentfile.provider.DocumentFile
  */
 object MediaIndexer {
 
-    private val VIDEO = setOf("mp4", "mkv", "webm", "3gp", "m4v", "mov")
+    private val VIDEO = setOf("mp4", "mkv", "webm", "3gp", "m4v", "mov", "ts", "avi")
     private val AUDIO = setOf("mp3", "aac", "m4a", "wav", "ogg", "flac", "opus")
 
     fun index(context: Context, treeUri: Uri): List<MediaEntry> {

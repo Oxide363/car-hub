@@ -12,8 +12,8 @@ android {
         applicationId = "com.carhub"
         minSdk = 26
         targetSdk = 34
-        versionCode = 13
-        versionName = "0.4.3"
+        versionCode = 14
+        versionName = "0.5"
     }
 
     buildFeatures {

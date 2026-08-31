@@ -253,16 +253,6 @@ fun CarHubShell(vm: MainViewModel) {
                 onClose = { vm.playing = null }
             )
         }
-        if (vm.mode == Mode.PASSENGER && vm.playing == null) {
-            Box(
-                Modifier.align(Alignment.TopEnd).padding(12.dp).size(42.dp).clip(CircleShape)
-                    .background(Color(0x33000000))
-                    .pointerInput(Unit) { detectTapGestures(onLongPress = { vm.askExitPin = true }) },
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(Icons.Filled.Lock, "Hold to exit", tint = CH.TextSecondary, modifier = Modifier.size(20.dp))
-            }
-        }
     }
 }
 
@@ -316,6 +306,14 @@ private fun CarHubRail(vm: MainViewModel) {
                 label = { Text("Owner") },
                 colors = railColors()
             )
+        } else {
+            Box(
+                Modifier.size(48.dp).clip(CircleShape).background(CH.Card)
+                    .pointerInput(Unit) { detectTapGestures(onLongPress = { vm.askExitPin = true }) },
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(Icons.Filled.Lock, "Hold to exit", tint = CH.TextSecondary, modifier = Modifier.size(22.dp))
+            }
         }
         Spacer(Modifier.height(12.dp))
     }
@@ -432,6 +430,12 @@ private fun HomeSection(vm: MainViewModel) {
                 color = CH.TextPrimary, fontSize = 26.sp, fontWeight = FontWeight.Bold
             )
             Text("Choose what to watch, hear or play", color = CH.TextSecondary, fontSize = 15.sp)
+            Spacer(Modifier.height(16.dp))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                StatCard("Movies", vm.movies.size, Icons.Filled.Movie, Modifier.weight(1f))
+                StatCard("Songs", vm.songs.size, Icons.Filled.MusicNote, Modifier.weight(1f))
+                StatCard("Games", 1, Icons.Filled.SportsEsports, Modifier.weight(1f))
+            }
             Spacer(Modifier.height(20.dp))
 
             val tiles = listOf(
@@ -499,6 +503,16 @@ private fun FeatureTile(
             ) { Icon(icon, label, tint = Color.White, modifier = Modifier.size(26.dp)) }
             Text(label, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
         }
+    }
+}
+
+@Composable
+private fun StatCard(label: String, count: Int, icon: ImageVector, modifier: Modifier = Modifier) {
+    Column(modifier.clip(RoundedCornerShape(14.dp)).background(CH.Card).padding(14.dp)) {
+        Icon(icon, null, tint = CH.Accent, modifier = Modifier.size(22.dp))
+        Spacer(Modifier.height(6.dp))
+        Text("$count", color = CH.TextPrimary, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+        Text(label, color = CH.TextSecondary, fontSize = 13.sp)
     }
 }
 
@@ -714,6 +728,7 @@ private fun MusicSection(vm: MainViewModel) {
 
 // ---------- Video player overlay ----------
 
+@androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 @Composable
 private fun PlayerOverlay(
     m: MediaEntry, startMs: Long, brightness: Float,
@@ -725,6 +740,7 @@ private fun PlayerOverlay(
     var vol by remember { mutableStateOf(audio.getStreamVolume(AudioManager.STREAM_MUSIC)) }
     var speed by remember { mutableStateOf(1f) }
     var error by remember { mutableStateOf<String?>(null) }
+    var controlsVisible by remember { mutableStateOf(true) }
     val speeds = listOf(0.5f, 1f, 1.25f, 1.5f, 2f)
     val player = remember {
         ExoPlayer.Builder(context).build().apply {
@@ -764,10 +780,20 @@ private fun PlayerOverlay(
 
     Box(Modifier.fillMaxSize().background(Color.Black)) {
         AndroidView(
-            factory = { ctx -> PlayerView(ctx).apply { this.player = player; useController = true } },
+            factory = { ctx ->
+                PlayerView(ctx).apply {
+                    this.player = player
+                    useController = true
+                    setControllerVisibilityListener(
+                        PlayerView.ControllerVisibilityListener { visibility ->
+                            controlsVisible = visibility == android.view.View.VISIBLE
+                        }
+                    )
+                }
+            },
             modifier = Modifier.fillMaxSize()
         )
-        Column(
+        if (controlsVisible) Column(
             Modifier.fillMaxWidth()
                 .background(Brush.verticalGradient(listOf(Color(0xAA000000), Color.Transparent)))
                 .padding(16.dp)

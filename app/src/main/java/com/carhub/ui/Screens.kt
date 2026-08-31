@@ -909,7 +909,7 @@ private fun MapsforgeView(uri: String) {
                         cache, store, mapView.model.mapViewPosition,
                         org.mapsforge.map.android.graphics.AndroidGraphicFactory.INSTANCE
                     )
-                    layer.setXmlRenderTheme(org.mapsforge.map.rendertheme.internal.MapsforgeThemes.DEFAULT)
+                    layer.setXmlRenderTheme(org.mapsforge.map.rendertheme.internal.MapsforgeThemes.MOTORIDER)
                     mapView.layerManager.layers.add(layer)
                     mapView.setCenter(store.boundingBox().centerPoint)
                     mapView.setZoomLevel(12.toByte())

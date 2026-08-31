@@ -60,5 +60,5 @@ dependencies {
     implementation("androidx.media3:media3-ui:1.4.1")
 
     // Offline OpenStreetMap rendering (vector .map files, fully offline).
-    implementation("org.mapsforge:mapsforge-map-android:0.21.0")
+    implementation("org.mapsforge:mapsforge-map-android:0.25.0")
 }

@@ -41,6 +41,8 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SportsEsports
+import androidx.compose.material.icons.filled.VolumeUp
+import android.media.AudioManager
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonColors
 import androidx.compose.material3.ButtonDefaults
@@ -96,7 +98,6 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.material.icons.filled.BatteryFull
 import androidx.compose.material.icons.filled.Bluetooth
-import androidx.compose.material.icons.filled.BrightnessAuto
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material3.Slider
@@ -246,7 +247,8 @@ fun CarHubShell(vm: MainViewModel) {
         }
         vm.playing?.let { entry ->
             PlayerOverlay(
-                m = entry, startMs = vm.playStartMs,
+                m = entry, startMs = vm.playStartMs, brightness = vm.brightness,
+                onBrightness = { vm.setBrightness(it) },
                 onProgress = { pos, dur -> vm.recordResume(entry, pos, dur) },
                 onClose = { vm.playing = null }
             )
@@ -332,11 +334,8 @@ private fun RailItem(vm: MainViewModel, s: Section, icon: ImageVector, label: St
 
 // ---------- Home ----------
 
-private fun brightnessIcon(b: Float): ImageVector = when {
-    b < 0f -> Icons.Filled.BrightnessAuto
-    b > 0.2f -> Icons.Filled.LightMode
-    else -> Icons.Filled.DarkMode
-}
+private fun brightnessIcon(b: Float): ImageVector =
+    if (b in 0f..0.2f) Icons.Filled.DarkMode else Icons.Filled.LightMode
 
 @Composable
 private fun StatusCluster(vm: MainViewModel) {
@@ -716,9 +715,17 @@ private fun MusicSection(vm: MainViewModel) {
 // ---------- Video player overlay ----------
 
 @Composable
-private fun PlayerOverlay(m: MediaEntry, startMs: Long, onProgress: (Long, Long) -> Unit, onClose: () -> Unit) {
+private fun PlayerOverlay(
+    m: MediaEntry, startMs: Long, brightness: Float,
+    onBrightness: (Float) -> Unit, onProgress: (Long, Long) -> Unit, onClose: () -> Unit
+) {
     val context = LocalContext.current
+    val audio = remember { context.getSystemService(Context.AUDIO_SERVICE) as AudioManager }
+    val maxVol = remember { audio.getStreamMaxVolume(AudioManager.STREAM_MUSIC) }
+    var vol by remember { mutableStateOf(audio.getStreamVolume(AudioManager.STREAM_MUSIC)) }
+    var speed by remember { mutableStateOf(1f) }
     var error by remember { mutableStateOf<String?>(null) }
+    val speeds = listOf(0.5f, 1f, 1.25f, 1.5f, 2f)
     val player = remember {
         ExoPlayer.Builder(context).build().apply {
             val items = m.playUris.mapIndexed { i, u ->
@@ -751,21 +758,63 @@ private fun PlayerOverlay(m: MediaEntry, startMs: Long, onProgress: (Long, Long)
         }
     }
 
+    val speedLabel = when (speed) {
+        0.5f -> "0.5x"; 1.25f -> "1.25x"; 1.5f -> "1.5x"; 2f -> "2x"; else -> "1x"
+    }
+
     Box(Modifier.fillMaxSize().background(Color.Black)) {
         AndroidView(
             factory = { ctx -> PlayerView(ctx).apply { this.player = player; useController = true } },
             modifier = Modifier.fillMaxSize()
         )
-        Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(
-                Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = Color.White,
-                modifier = Modifier.size(30.dp).clickable { onClose() }
-            )
-            Spacer(Modifier.width(16.dp))
-            Text(
-                m.title + if (m.isMultiPart) "  (${m.partUris.size} parts)" else "",
-                color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold
-            )
+        Column(
+            Modifier.fillMaxWidth()
+                .background(Brush.verticalGradient(listOf(Color(0xAA000000), Color.Transparent)))
+                .padding(16.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = Color.White,
+                    modifier = Modifier.size(30.dp).clickable { onClose() }
+                )
+                Spacer(Modifier.width(16.dp))
+                Text(
+                    m.title + if (m.isMultiPart) "  (${m.partUris.size} parts)" else "",
+                    color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold,
+                    modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis
+                )
+                Box(
+                    Modifier.clip(RoundedCornerShape(8.dp)).background(Color(0x55FFFFFF))
+                        .clickable {
+                            speed = speeds[(speeds.indexOf(speed) + 1) % speeds.size]
+                            player.setPlaybackSpeed(speed)
+                        }
+                        .padding(horizontal = 14.dp, vertical = 6.dp)
+                ) {
+                    Text(speedLabel, color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+            Spacer(Modifier.height(6.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Filled.LightMode, "Brightness", tint = Color.White, modifier = Modifier.size(20.dp))
+                Slider(
+                    value = if (brightness < 0f) 1f else brightness,
+                    onValueChange = { onBrightness(it.coerceIn(0.05f, 1f)) },
+                    valueRange = 0.05f..1f,
+                    modifier = Modifier.weight(1f).padding(horizontal = 8.dp)
+                )
+                Spacer(Modifier.width(12.dp))
+                Icon(Icons.Filled.VolumeUp, "Volume", tint = Color.White, modifier = Modifier.size(20.dp))
+                Slider(
+                    value = vol.toFloat(),
+                    onValueChange = { v ->
+                        vol = v.toInt()
+                        audio.setStreamVolume(AudioManager.STREAM_MUSIC, vol, 0)
+                    },
+                    valueRange = 0f..maxVol.toFloat().coerceAtLeast(1f),
+                    modifier = Modifier.weight(1f).padding(horizontal = 8.dp)
+                )
+            }
         }
         if (error != null) {
             Box(

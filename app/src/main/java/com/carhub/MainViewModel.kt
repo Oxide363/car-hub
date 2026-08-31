@@ -31,6 +31,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     var loaded by mutableStateOf(false); private set
     var hasPin by mutableStateOf(false); private set
+    var hasPattern by mutableStateOf(false); private set
+    var lockoutUntil by mutableStateOf(0L); private set
     var mode by mutableStateOf(Mode.OWNER); private set
     var tier by mutableStateOf("B"); private set
     var treeUri by mutableStateOf<String?>(null); private set
@@ -56,6 +58,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     init {
         viewModelScope.launch {
             hasPin = prefs.pinHash.first() != null
+            hasPattern = prefs.patternHash.first() != null
             treeUri = prefs.treeUri.first()
             mode = if (prefs.passenger.first()) Mode.PASSENGER else Mode.OWNER
             tier = Kiosk.tier(getApplication())
@@ -67,19 +70,83 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    private fun sha(s: String): String =
-        MessageDigest.getInstance("SHA-256").digest(s.toByteArray())
-            .joinToString("") { "%02x".format(it.toInt() and 0xFF) }
+    // ----- credential hashing: salted PBKDF2-HMAC-SHA256 -----
+    private fun pbkdf2(secret: String, salt: ByteArray): ByteArray {
+        val spec = javax.crypto.spec.PBEKeySpec(secret.toCharArray(), salt, 120_000, 256)
+        return javax.crypto.SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256")
+            .generateSecret(spec).encoded
+    }
+
+    private fun hashSecret(secret: String): String {
+        val salt = ByteArray(16).also { java.security.SecureRandom().nextBytes(it) }
+        val h = pbkdf2(secret, salt)
+        return android.util.Base64.encodeToString(salt, android.util.Base64.NO_WRAP) + ":" +
+            android.util.Base64.encodeToString(h, android.util.Base64.NO_WRAP)
+    }
+
+    private fun verifySecret(secret: String, stored: String?): Boolean {
+        if (stored == null) return false
+        val parts = stored.split(":")
+        if (parts.size != 2) return false
+        return try {
+            val salt = android.util.Base64.decode(parts[0], android.util.Base64.NO_WRAP)
+            val expected = android.util.Base64.decode(parts[1], android.util.Base64.NO_WRAP)
+            MessageDigest.isEqual(pbkdf2(secret, salt), expected) // constant-time compare
+        } catch (e: Exception) { false }
+    }
+
+    // ----- brute-force lockout (escalating) -----
+    private var failCount = 0
+    private var strikeouts = 0
+
+    fun lockedOut(): Boolean = System.currentTimeMillis() < lockoutUntil
+    fun lockRemainingSec(): Long =
+        ((lockoutUntil - System.currentTimeMillis()).coerceAtLeast(0L) + 999L) / 1000L
+
+    private fun registerAttempt(ok: Boolean) {
+        if (ok) { failCount = 0; strikeouts = 0; lockoutUntil = 0L } else {
+            failCount++
+            if (failCount >= 5) {
+                strikeouts++
+                val secs = 30L * (1 shl (strikeouts - 1).coerceAtMost(4))
+                lockoutUntil = System.currentTimeMillis() + secs * 1000L
+                failCount = 0
+            }
+        }
+    }
 
     fun setupPin(pin: String) {
-        viewModelScope.launch { prefs.setPin(sha(pin)); hasPin = true }
+        viewModelScope.launch(Dispatchers.Default) {
+            val h = hashSecret(pin)
+            prefs.setPin(h)
+            hasPin = true
+        }
     }
 
     fun changePin(pin: String) = setupPin(pin)
 
     suspend fun verifyPin(pin: String): Boolean {
-        val stored = prefs.pinHash.first() ?: return false
-        return stored == sha(pin)
+        if (lockedOut()) return false
+        val stored = prefs.pinHash.first()
+        val ok = withContext(Dispatchers.Default) { verifySecret(pin, stored) }
+        registerAttempt(ok)
+        return ok
+    }
+
+    fun setupPattern(seq: List<Int>) {
+        viewModelScope.launch(Dispatchers.Default) {
+            val h = hashSecret(seq.joinToString("-"))
+            prefs.setPattern(h)
+            hasPattern = true
+        }
+    }
+
+    suspend fun verifyPattern(seq: List<Int>): Boolean {
+        if (lockedOut()) return false
+        val stored = prefs.patternHash.first()
+        val ok = withContext(Dispatchers.Default) { verifySecret(seq.joinToString("-"), stored) }
+        registerAttempt(ok)
+        return ok
     }
 
     fun setTree(uri: Uri) {

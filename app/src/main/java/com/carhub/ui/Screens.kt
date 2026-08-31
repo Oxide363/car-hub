@@ -101,8 +101,15 @@ import androidx.compose.material.icons.filled.BluetoothDisabled
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.filled.CheckBox
+import androidx.compose.material.icons.filled.CheckBoxOutlineBlank
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -242,6 +249,16 @@ fun CarHubShell(vm: MainViewModel) {
                 onClose = { vm.playing = null }
             )
         }
+        if (vm.mode == Mode.PASSENGER && vm.playing == null) {
+            Box(
+                Modifier.align(Alignment.TopEnd).padding(12.dp).size(42.dp).clip(CircleShape)
+                    .background(Color(0x33000000))
+                    .pointerInput(Unit) { detectTapGestures(onLongPress = { vm.askExitPin = true }) },
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(Icons.Filled.Lock, "Hold to exit", tint = CH.TextSecondary, modifier = Modifier.size(20.dp))
+            }
+        }
     }
 }
 
@@ -288,15 +305,7 @@ private fun CarHubRail(vm: MainViewModel) {
         RailItem(vm, Section.GAMES, Icons.Filled.SportsEsports, "Games")
         RailItem(vm, Section.MAPS, Icons.Filled.Map, "Maps")
         Spacer(Modifier.weight(1f))
-        if (vm.mode == Mode.PASSENGER) {
-            NavigationRailItem(
-                selected = false,
-                onClick = { vm.askExitPin = true },
-                icon = { Icon(Icons.Filled.Lock, "Exit") },
-                label = { Text("Exit") },
-                colors = railColors()
-            )
-        } else {
+        if (vm.mode == Mode.OWNER) {
             NavigationRailItem(
                 selected = vm.section == Section.SETTINGS,
                 onClick = { vm.go(Section.SETTINGS) },
@@ -872,12 +881,27 @@ private fun MapsSection(vm: MainViewModel) {
 
 @Composable
 private fun KidsSection(vm: MainViewModel) {
+    val kidMovies = vm.kidsMovies()
     Column(Modifier.fillMaxSize()) {
         TopBar("KIDS", onBack = { vm.go(Section.HOME) })
         Box(Modifier.weight(1f).fillMaxWidth()) {
-            EmptyBox(
-                "Kids Mode will show only owner-approved movies, music and games.\n\nComing in a future build."
-            )
+            when {
+                vm.kidsCategories.isEmpty() -> EmptyBox(
+                    "Kids Mode is empty.\n\nOwner: open Owner → Settings → Kids-safe folders and pick which categories kids can see."
+                )
+                kidMovies.isEmpty() -> EmptyBox("No kid-safe movies in the selected folders yet.")
+                else -> LazyVerticalGrid(
+                    columns = GridCells.Adaptive(150.dp),
+                    contentPadding = PaddingValues(20.dp),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(20.dp),
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    gridItems(kidMovies) { m ->
+                        PosterCard(m, vm.isFavorite(m.uri), { vm.toggleFavorite(m.uri) }) { vm.openMovie(m) }
+                    }
+                }
+            }
         }
     }
 }
@@ -951,12 +975,173 @@ private fun SettingsSection(vm: MainViewModel) {
             }, colors = btnAccent()) { Text("Update PIN") }
             if (msg.isNotEmpty()) Text(msg, color = CH.Accent, fontSize = 14.sp)
             HorizontalDivider(color = CH.Divider)
+            Text("Kids-safe folders", color = CH.TextPrimary, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+            Text("Only these categories appear in the Kids section.", color = CH.TextSecondary, fontSize = 13.sp)
+            if (vm.allCategories.isEmpty()) {
+                Text("No content yet — add media and rescan.", color = CH.TextSecondary, fontSize = 13.sp)
+            } else {
+                vm.allCategories.forEach { cat ->
+                    Row(
+                        Modifier.fillMaxWidth().clickable { vm.toggleKidsCategory(cat) }.padding(vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            if (cat in vm.kidsCategories) Icons.Filled.CheckBox else Icons.Filled.CheckBoxOutlineBlank,
+                            null, tint = if (cat in vm.kidsCategories) CH.Accent else CH.TextSecondary
+                        )
+                        Spacer(Modifier.width(12.dp))
+                        Text(cat, color = CH.TextPrimary, fontSize = 16.sp)
+                    }
+                }
+            }
+            HorizontalDivider(color = CH.Divider)
             Button(onClick = { vm.startPassenger() }, colors = btnPlain()) { Text("Start Passenger Mode") }
         }
     }
 }
 
 // ---------- First-run + lock screens ----------
+
+@Composable
+private fun PinPad(title: String, error: String?, submitLabel: String, onSubmit: (String) -> Unit, onCancel: (() -> Unit)?) {
+    var pin by remember { mutableStateOf("") }
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(title, color = CH.TextPrimary, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(16.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            repeat(maxOf(4, pin.length)) { i ->
+                Box(
+                    Modifier.size(12.dp).clip(CircleShape)
+                        .background(if (i < pin.length) CH.Accent else CH.CardAlt)
+                )
+            }
+        }
+        Spacer(Modifier.height(10.dp))
+        if (error != null) {
+            Text(error, color = Color(0xFFEF5350), fontSize = 13.sp)
+            Spacer(Modifier.height(6.dp))
+        }
+        listOf("1", "2", "3", "4", "5", "6", "7", "8", "9", "", "0", "⌫").chunked(3).forEach { row ->
+            Row {
+                row.forEach { k ->
+                    Box(
+                        Modifier.padding(8.dp).size(62.dp).clip(CircleShape)
+                            .background(if (k.isEmpty()) Color.Transparent else CH.Card)
+                            .then(
+                                if (k.isEmpty()) Modifier
+                                else Modifier.clickable {
+                                    if (k == "⌫") { if (pin.isNotEmpty()) pin = pin.dropLast(1) }
+                                    else if (pin.length < 8) pin += k
+                                }
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (k.isNotEmpty()) {
+                            Text(k, color = CH.TextPrimary, fontSize = if (k == "⌫") 22.sp else 26.sp)
+                        }
+                    }
+                }
+            }
+        }
+        Spacer(Modifier.height(14.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            if (onCancel != null) Button(onClick = onCancel, colors = btnPlain()) { Text("Cancel") }
+            Button(onClick = { onSubmit(pin) }, colors = btnAccent(), enabled = pin.length >= 4) {
+                Text(submitLabel)
+            }
+        }
+    }
+}
+
+@Composable
+private fun PatternLock(title: String, error: String?, onPattern: (List<Int>) -> Unit, onCancel: (() -> Unit)?) {
+    var selected by remember { mutableStateOf<List<Int>>(emptyList()) }
+    var current by remember { mutableStateOf(Offset.Zero) }
+    var dragging by remember { mutableStateOf(false) }
+
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(title, color = CH.TextPrimary, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(8.dp))
+        if (error != null) {
+            Text(error, color = Color(0xFFEF5350), fontSize = 13.sp)
+            Spacer(Modifier.height(6.dp))
+        }
+        Canvas(
+            Modifier.size(260.dp).pointerInput(Unit) {
+                val cell = size.width / 3f
+                fun centerOf(i: Int) = Offset((i % 3 + 0.5f) * cell, (i / 3 + 0.5f) * cell)
+                fun hit(pos: Offset): Int? {
+                    for (i in 0 until 9) if ((pos - centerOf(i)).getDistance() < cell * 0.30f) return i
+                    return null
+                }
+                detectDragGestures(
+                    onDragStart = { pos ->
+                        dragging = true; selected = emptyList()
+                        hit(pos)?.let { selected = listOf(it) }; current = pos
+                    },
+                    onDrag = { change, _ ->
+                        current = change.position
+                        hit(change.position)?.let { if (it !in selected) selected = selected + it }
+                    },
+                    onDragEnd = {
+                        dragging = false
+                        val done = selected; selected = emptyList()
+                        if (done.size >= 4) onPattern(done)
+                    },
+                    onDragCancel = { dragging = false; selected = emptyList() }
+                )
+            }
+        ) {
+            val cell = size.width / 3f
+            fun centerOf(i: Int) = Offset((i % 3 + 0.5f) * cell, (i / 3 + 0.5f) * cell)
+            for (k in 0 until selected.size - 1) {
+                drawLine(CH.Accent, centerOf(selected[k]), centerOf(selected[k + 1]), strokeWidth = 12f)
+            }
+            if (dragging && selected.isNotEmpty()) {
+                drawLine(CH.Accent, centerOf(selected.last()), current, strokeWidth = 12f)
+            }
+            for (i in 0 until 9) {
+                drawCircle(CH.CardAlt, radius = cell * 0.12f, center = centerOf(i))
+                if (i in selected) drawCircle(CH.Accent, radius = cell * 0.16f, center = centerOf(i))
+            }
+        }
+        Spacer(Modifier.height(12.dp))
+        if (onCancel != null) Button(onClick = onCancel, colors = btnPlain()) { Text("Cancel") }
+    }
+}
+
+@Composable
+fun ExitGate(
+    lockedSeconds: Long,
+    verifyPin: suspend (String) -> Boolean,
+    verifyPattern: suspend (List<Int>) -> Boolean,
+    onSuccess: () -> Unit,
+    onCancel: () -> Unit
+) {
+    var step by remember { mutableStateOf(0) }
+    var err by remember { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
+    Box(Modifier.fillMaxSize().background(CH.Bg), contentAlignment = Alignment.Center) {
+        if (lockedSeconds > 0) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Icon(Icons.Filled.Lock, null, tint = CH.TextSecondary, modifier = Modifier.size(48.dp))
+                Spacer(Modifier.height(12.dp))
+                Text("Too many attempts", color = CH.TextPrimary, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                Text("Try again in ${lockedSeconds}s", color = CH.TextSecondary, fontSize = 14.sp)
+                Spacer(Modifier.height(20.dp))
+                Button(onClick = onCancel, colors = btnPlain()) { Text("Back") }
+            }
+        } else if (step == 0) {
+            PinPad("Enter Owner PIN", err, "Next", onSubmit = { pin ->
+                scope.launch { if (verifyPin(pin)) { err = null; step = 1 } else err = "Incorrect PIN" }
+            }, onCancel = onCancel)
+        } else {
+            PatternLock("Draw your unlock pattern", err, onPattern = { seq ->
+                scope.launch { if (verifyPattern(seq)) onSuccess() else err = "Pattern doesn't match" }
+            }, onCancel = { step = 0; err = null })
+        }
+    }
+}
 
 @Composable
 fun SplashScreen() {
@@ -986,72 +1171,36 @@ fun SplashScreen() {
 }
 
 @Composable
-fun PinSetupScreen(onDone: (String) -> Unit) {
-    var pin by remember { mutableStateOf("") }
-    var confirm by remember { mutableStateOf("") }
-    var err by remember { mutableStateOf("") }
-    Column(
-        Modifier.fillMaxSize().background(CH.Bg).padding(40.dp),
-        verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Text("Welcome to Car Hub", color = CH.TextPrimary, fontSize = 30.sp, fontWeight = FontWeight.Bold)
-        Spacer(Modifier.height(8.dp))
-        Text("Create an Owner PIN. You'll use it to exit Passenger Mode.", color = CH.TextSecondary, textAlign = TextAlign.Center)
-        Spacer(Modifier.height(28.dp))
-        OutlinedTextField(
-            pin, { pin = it.filter { c -> c.isDigit() }.take(8) }, label = { Text("PIN (4–8 digits)") },
-            visualTransformation = PasswordVisualTransformation(),
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
-            singleLine = true, colors = fieldColors()
-        )
-        Spacer(Modifier.height(12.dp))
-        OutlinedTextField(
-            confirm, { confirm = it.filter { c -> c.isDigit() }.take(8) }, label = { Text("Confirm PIN") },
-            visualTransformation = PasswordVisualTransformation(),
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
-            singleLine = true, colors = fieldColors()
-        )
-        Spacer(Modifier.height(20.dp))
-        Button(onClick = {
-            when {
-                pin.length !in 4..8 -> err = "PIN must be 4–8 digits."
-                pin != confirm -> err = "PINs do not match."
-                else -> onDone(pin)
+fun PinSetupScreen(onComplete: (String, List<Int>) -> Unit) {
+    var step by remember { mutableStateOf(0) }
+    var pin1 by remember { mutableStateOf("") }
+    var pat1 by remember { mutableStateOf<List<Int>>(emptyList()) }
+    var err by remember { mutableStateOf<String?>(null) }
+    Box(Modifier.fillMaxSize().background(CH.Bg), contentAlignment = Alignment.Center) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text("Set up Car Hub", color = CH.TextPrimary, fontSize = 26.sp, fontWeight = FontWeight.Bold)
+            Text("Step ${step + 1} of 4", color = CH.TextSecondary, fontSize = 13.sp)
+            Spacer(Modifier.height(20.dp))
+            when (step) {
+                0 -> PinPad(
+                    "Create a PIN (4–8 digits)", err, "Next",
+                    onSubmit = { pin1 = it; err = null; step = 1 }, onCancel = null
+                )
+                1 -> PinPad(
+                    "Confirm your PIN", err, "Next",
+                    onSubmit = { if (it == pin1) { err = null; step = 2 } else err = "PINs don't match" },
+                    onCancel = { step = 0; err = null }
+                )
+                2 -> PatternLock(
+                    "Draw an unlock pattern (4+ dots)", err,
+                    onPattern = { pat1 = it; err = null; step = 3 }, onCancel = null
+                )
+                else -> PatternLock(
+                    "Draw the pattern again", err,
+                    onPattern = { if (it == pat1) onComplete(pin1, pat1) else err = "Patterns don't match" },
+                    onCancel = { step = 2; err = null }
+                )
             }
-        }, colors = btnAccent()) { Text("Create PIN", fontSize = 16.sp) }
-        if (err.isNotEmpty()) { Spacer(Modifier.height(12.dp)); Text(err, color = Color(0xFFEF5350)) }
-    }
-}
-
-@Composable
-fun PinEntryScreen(
-    title: String,
-    onVerify: suspend (String) -> Boolean,
-    onSuccess: () -> Unit,
-    onCancel: () -> Unit
-) {
-    var pin by remember { mutableStateOf("") }
-    var err by remember { mutableStateOf("") }
-    val scope = rememberCoroutineScope()
-    Column(
-        Modifier.fillMaxSize().background(CH.Bg).padding(40.dp),
-        verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Text(title, color = CH.TextPrimary, fontSize = 24.sp, fontWeight = FontWeight.Bold)
-        Spacer(Modifier.height(24.dp))
-        OutlinedTextField(
-            pin, { pin = it.filter { c -> c.isDigit() }.take(8) }, label = { Text("Owner PIN") },
-            visualTransformation = PasswordVisualTransformation(),
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
-            singleLine = true, colors = fieldColors()
-        )
-        Spacer(Modifier.height(20.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Button(onClick = { onCancel() }, colors = btnPlain()) { Text("Cancel") }
-            Button(onClick = {
-                scope.launch { if (onVerify(pin)) onSuccess() else { err = "Incorrect PIN"; pin = "" } }
-            }, colors = btnAccent()) { Text("Unlock") }
         }
-        if (err.isNotEmpty()) { Spacer(Modifier.height(12.dp)); Text(err, color = Color(0xFFEF5350)) }
     }
 }

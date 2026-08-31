@@ -14,7 +14,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.carhub.security.Kiosk
 import com.carhub.ui.CarHubShell
 import com.carhub.ui.CarHubTheme
-import com.carhub.ui.PinEntryScreen
+import com.carhub.ui.ExitGate
 import com.carhub.ui.PinSetupScreen
 import com.carhub.ui.SplashScreen
 
@@ -40,7 +40,9 @@ class MainActivity : ComponentActivity() {
                 val vm: MainViewModel = viewModel()
                 when {
                     !vm.loaded -> SplashScreen()
-                    !vm.hasPin -> PinSetupScreen(onDone = { vm.setupPin(it) })
+                    !vm.hasPin || !vm.hasPattern -> PinSetupScreen(
+                        onComplete = { pin, pattern -> vm.setupPin(pin); vm.setupPattern(pattern) }
+                    )
                     else -> {
                         LaunchedEffect(vm.mode) {
                             if (vm.mode == Mode.PASSENGER) Kiosk.startLock(this@MainActivity)
@@ -56,9 +58,10 @@ class MainActivity : ComponentActivity() {
                             }
                         }
                         if (vm.askExitPin) {
-                            PinEntryScreen(
-                                title = "Enter Owner PIN to exit",
-                                onVerify = { vm.verifyPin(it) },
+                            ExitGate(
+                                lockedSeconds = vm.lockRemainingSec(),
+                                verifyPin = { vm.verifyPin(it) },
+                                verifyPattern = { vm.verifyPattern(it) },
                                 onSuccess = { vm.exitPassenger() },
                                 onCancel = { vm.askExitPin = false }
                             )

@@ -17,6 +17,7 @@ class Prefs(private val context: Context) {
 
     companion object {
         private val PIN = stringPreferencesKey("pin_hash")
+        private val PATTERN = stringPreferencesKey("pattern_hash")
         private val TREE = stringPreferencesKey("tree_uri")
         private val PASSENGER = booleanPreferencesKey("passenger_mode")
         private val FAVORITES = stringSetPreferencesKey("favorites")
@@ -25,6 +26,7 @@ class Prefs(private val context: Context) {
     }
 
     val pinHash: Flow<String?> = context.dataStore.data.map { it[PIN] }
+    val patternHash: Flow<String?> = context.dataStore.data.map { it[PATTERN] }
     val treeUri: Flow<String?> = context.dataStore.data.map { it[TREE] }
     val passenger: Flow<Boolean> = context.dataStore.data.map { it[PASSENGER] ?: false }
     val favorites: Flow<Set<String>> = context.dataStore.data.map { it[FAVORITES] ?: emptySet() }
@@ -33,6 +35,10 @@ class Prefs(private val context: Context) {
 
     suspend fun setPin(hash: String) {
         context.dataStore.edit { it[PIN] = hash }
+    }
+
+    suspend fun setPattern(hash: String) {
+        context.dataStore.edit { it[PATTERN] = hash }
     }
 
     suspend fun setTree(uri: String) {

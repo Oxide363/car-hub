@@ -279,7 +279,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     // ----- screen brightness (per-app window; no system permission needed) -----
-    fun setBrightness(v: Float) {
+    fun updateBrightness(v: Float) {
         brightness = v
         viewModelScope.launch { prefs.setBrightness(v) }
     }
@@ -291,7 +291,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             brightness > 0.2f -> 0.10f
             else -> -1f
         }
-        setBrightness(next)
+        updateBrightness(next)
     }
 
     // ----- mode -----

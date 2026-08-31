@@ -248,7 +248,7 @@ fun CarHubShell(vm: MainViewModel) {
         vm.playing?.let { entry ->
             PlayerOverlay(
                 m = entry, startMs = vm.playStartMs, brightness = vm.brightness,
-                onBrightness = { vm.setBrightness(it) },
+                onBrightness = { vm.updateBrightness(it) },
                 onProgress = { pos, dur -> vm.recordResume(entry, pos, dur) },
                 onClose = { vm.playing = null }
             )
@@ -1012,13 +1012,13 @@ private fun SettingsSection(vm: MainViewModel) {
                 Icon(Icons.Filled.DarkMode, null, tint = CH.TextSecondary, modifier = Modifier.size(20.dp))
                 Slider(
                     value = if (vm.brightness < 0f) 1f else vm.brightness,
-                    onValueChange = { vm.setBrightness(it.coerceIn(0.05f, 1f)) },
+                    onValueChange = { vm.updateBrightness(it.coerceIn(0.05f, 1f)) },
                     valueRange = 0.05f..1f,
                     modifier = Modifier.weight(1f).padding(horizontal = 8.dp)
                 )
                 Icon(Icons.Filled.LightMode, null, tint = CH.TextSecondary, modifier = Modifier.size(20.dp))
             }
-            Button(onClick = { vm.setBrightness(-1f) }, colors = btnPlain()) { Text("Use system brightness") }
+            Button(onClick = { vm.updateBrightness(-1f) }, colors = btnPlain()) { Text("Use system brightness") }
             HorizontalDivider(color = CH.Divider)
             Text("Change Owner PIN", color = CH.TextPrimary, fontWeight = FontWeight.Bold, fontSize = 18.sp)
             OutlinedTextField(

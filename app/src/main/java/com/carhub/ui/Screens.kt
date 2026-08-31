@@ -96,7 +96,13 @@ import androidx.compose.runtime.produceState
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.material.icons.filled.BatteryFull
+import androidx.compose.material.icons.filled.Bluetooth
+import androidx.compose.material.icons.filled.BluetoothDisabled
 import androidx.compose.material.icons.filled.Bolt
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FavoriteBorder
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.shape.CircleShape
 import com.carhub.data.Thumbs
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -191,22 +197,48 @@ fun CarHubShell(vm: MainViewModel) {
     Box(Modifier.fillMaxSize().background(CH.Bg)) {
         Row(Modifier.fillMaxSize()) {
             CarHubRail(vm)
-            Box(Modifier.weight(1f).fillMaxSize()) {
-                when (vm.section) {
-                    Section.HOME -> HomeSection(vm)
-                    Section.MOVIES -> MoviesSection(vm)
-                    Section.MUSIC -> MusicSection(vm)
-                    Section.GAMES -> GamesSection(vm)
-                    Section.MAPS -> MapsSection(vm)
-                    Section.KIDS -> KidsSection(vm)
-                    Section.CONTENT -> ContentSection(vm)
-                    Section.SETTINGS -> SettingsSection(vm)
+            Column(Modifier.weight(1f).fillMaxSize()) {
+                Box(Modifier.weight(1f).fillMaxWidth()) {
+                    when (vm.section) {
+                        Section.HOME -> HomeSection(vm)
+                        Section.MOVIES -> MoviesSection(vm)
+                        Section.MUSIC -> MusicSection(vm)
+                        Section.GAMES -> GamesSection(vm)
+                        Section.MAPS -> MapsSection(vm)
+                        Section.KIDS -> KidsSection(vm)
+                        Section.CONTENT -> ContentSection(vm)
+                        Section.SETTINGS -> SettingsSection(vm)
+                    }
                 }
+                if (vm.nowPlaying != null) NowPlayingBar(vm)
             }
         }
         vm.playing?.let { entry ->
-            PlayerOverlay(entry) { vm.playing = null }
+            PlayerOverlay(
+                m = entry, startMs = vm.playStartMs,
+                onProgress = { pos, dur -> vm.recordResume(entry, pos, dur) },
+                onClose = { vm.playing = null }
+            )
         }
+    }
+}
+
+@Composable
+private fun NowPlayingBar(vm: MainViewModel) {
+    Row(
+        Modifier.fillMaxWidth().background(CH.Card).padding(horizontal = 20.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(Icons.Filled.MusicNote, null, tint = CH.Accent)
+        Spacer(Modifier.width(16.dp))
+        Text(
+            vm.nowPlaying ?: "", color = CH.TextPrimary, modifier = Modifier.weight(1f),
+            maxLines = 1, overflow = TextOverflow.Ellipsis
+        )
+        Icon(
+            if (vm.audioIsPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow, "Play/Pause",
+            tint = CH.TextPrimary, modifier = Modifier.size(34.dp).clickable { vm.toggleAudio() }
+        )
     }
 }
 
@@ -269,6 +301,7 @@ private fun StatusCluster() {
     var pct by remember { mutableStateOf<Int?>(null) }
     var charging by remember { mutableStateOf(false) }
     var clock by remember { mutableStateOf("") }
+    var bt by remember { mutableStateOf<Boolean?>(null) }
 
     DisposableEffect(Unit) {
         val receiver = object : BroadcastReceiver() {
@@ -299,8 +332,23 @@ private fun StatusCluster() {
             delay(15000)
         }
     }
+    LaunchedEffect(Unit) {
+        while (true) {
+            bt = try {
+                val mgr = context.getSystemService(Context.BLUETOOTH_SERVICE) as? android.bluetooth.BluetoothManager
+                mgr?.adapter?.isEnabled
+            } catch (e: Exception) { null }
+            delay(8000)
+        }
+    }
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
         if (clock.isNotEmpty()) Text(clock, color = CH.TextSecondary, fontSize = 14.sp)
+        if (bt != null) {
+            Icon(
+                if (bt == true) Icons.Filled.Bluetooth else Icons.Filled.BluetoothDisabled, "Bluetooth",
+                tint = if (bt == true) CH.Accent else CH.TextSecondary, modifier = Modifier.size(18.dp)
+            )
+        }
         Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(
                 if (charging) Icons.Filled.Bolt else Icons.Filled.BatteryFull, null,
@@ -350,6 +398,19 @@ private fun HomeSection(vm: MainViewModel) {
                     }
                     repeat(3 - row.size) { Spacer(Modifier.weight(1f)) }
                 }
+            }
+
+            if (vm.continueList.isNotEmpty()) {
+                Text("Continue watching", color = CH.TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(10.dp))
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    items(vm.continueList) { m ->
+                        Box(Modifier.width(120.dp)) {
+                            PosterCard(m, vm.isFavorite(m.uri), { vm.toggleFavorite(m.uri) }) { vm.openMovie(m) }
+                        }
+                    }
+                }
+                Spacer(Modifier.height(20.dp))
             }
 
             if (vm.mode == Mode.OWNER) {
@@ -402,10 +463,14 @@ private fun MoviesSection(vm: MainViewModel) {
     var query by remember { mutableStateOf("") }
 
     val all = vm.movies
-    val categories = listOf("All") + all.map { it.category }.distinct().sorted()
+    val categories = listOf("All", "★ Favorites") + all.map { it.category }.distinct().sorted()
     val filtered = all.filter {
-        (category == "All" || it.category == category) &&
-            (query.isBlank() || it.title.contains(query, ignoreCase = true))
+        val catOk = when (category) {
+            "All" -> true
+            "★ Favorites" -> vm.isFavorite(it.uri)
+            else -> it.category == category
+        }
+        catOk && (query.isBlank() || it.title.contains(query, ignoreCase = true))
     }
 
     Column(Modifier.fillMaxSize()) {
@@ -441,7 +506,9 @@ private fun MoviesSection(vm: MainViewModel) {
                     verticalArrangement = Arrangement.spacedBy(20.dp),
                     modifier = Modifier.fillMaxSize()
                 ) {
-                    gridItems(filtered) { m -> PosterCard(m) { vm.playing = m } }
+                    gridItems(filtered) { m ->
+                        PosterCard(m, vm.isFavorite(m.uri), { vm.toggleFavorite(m.uri) }) { vm.openMovie(m) }
+                    }
                 }
             }
         }
@@ -480,7 +547,7 @@ private fun rememberThumb(entry: MediaEntry): ImageBitmap? {
 }
 
 @Composable
-private fun PosterCard(m: MediaEntry, onClick: () -> Unit) {
+private fun PosterCard(m: MediaEntry, isFav: Boolean, onToggleFav: () -> Unit, onClick: () -> Unit) {
     val thumb = rememberThumb(m)
     Column(Modifier.clickable { onClick() }) {
         val g = posterGradients[(m.title.hashCode() and 0x7FFFFFFF) % posterGradients.size]
@@ -510,6 +577,16 @@ private fun PosterCard(m: MediaEntry, onClick: () -> Unit) {
                     Text("${m.partUris.size} parts", color = Color.White, fontSize = 11.sp)
                 }
             }
+            Box(
+                Modifier.align(Alignment.TopStart).padding(6.dp)
+                    .clip(CircleShape).background(Color(0x88000000))
+                    .clickable { onToggleFav() }.padding(5.dp)
+            ) {
+                Icon(
+                    if (isFav) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder, "Favorite",
+                    tint = if (isFav) Color(0xFFFF5A79) else Color.White, modifier = Modifier.size(18.dp)
+                )
+            }
         }
         Spacer(Modifier.height(8.dp))
         Text(
@@ -526,12 +603,6 @@ private fun PosterCard(m: MediaEntry, onClick: () -> Unit) {
 
 @Composable
 private fun MusicSection(vm: MainViewModel) {
-    val context = LocalContext.current
-    val player = remember { ExoPlayer.Builder(context).build() }
-    var nowPlaying by remember { mutableStateOf<String?>(null) }
-    var isPlaying by remember { mutableStateOf(false) }
-    DisposableEffect(Unit) { onDispose { player.release() } }
-
     Column(Modifier.fillMaxSize()) {
         TopBar("MUSIC", onBack = { vm.go(Section.HOME) })
         Box(Modifier.weight(1f).fillMaxWidth()) {
@@ -545,11 +616,8 @@ private fun MusicSection(vm: MainViewModel) {
                 else -> LazyColumn(Modifier.fillMaxSize()) {
                     items(songs) { s ->
                         Row(
-                            Modifier.fillMaxWidth().clickable {
-                                player.setMediaItem(MediaItem.fromUri(Uri.parse(s.uri)))
-                                player.prepare(); player.play()
-                                nowPlaying = s.title; isPlaying = true
-                            }.padding(horizontal = 20.dp, vertical = 14.dp),
+                            Modifier.fillMaxWidth().clickable { vm.playAudio(s) }
+                                .padding(horizontal = 20.dp, vertical = 14.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             val art = rememberThumb(s)
@@ -582,31 +650,13 @@ private fun MusicSection(vm: MainViewModel) {
                 }
             }
         }
-        if (nowPlaying != null) {
-            Row(
-                Modifier.fillMaxWidth().background(CH.Card).padding(20.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(Icons.Filled.MusicNote, null, tint = CH.Accent)
-                Spacer(Modifier.width(16.dp))
-                Text(nowPlaying!!, color = CH.TextPrimary, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Icon(
-                    if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow, "Play/Pause",
-                    tint = CH.TextPrimary,
-                    modifier = Modifier.size(36.dp).clickable {
-                        if (isPlaying) player.pause() else player.play()
-                        isPlaying = !isPlaying
-                    }
-                )
-            }
-        }
     }
 }
 
 // ---------- Video player overlay ----------
 
 @Composable
-private fun PlayerOverlay(m: MediaEntry, onClose: () -> Unit) {
+private fun PlayerOverlay(m: MediaEntry, startMs: Long, onProgress: (Long, Long) -> Unit, onClose: () -> Unit) {
     val context = LocalContext.current
     var error by remember { mutableStateOf<String?>(null) }
     val player = remember {
@@ -630,10 +680,16 @@ private fun PlayerOverlay(m: MediaEntry, onClose: () -> Unit) {
                 }
             })
             prepare()
+            if (startMs > 0) seekTo(startMs)
             playWhenReady = true
         }
     }
-    DisposableEffect(Unit) { onDispose { player.release() } }
+    DisposableEffect(Unit) {
+        onDispose {
+            try { onProgress(player.currentPosition, player.duration.coerceAtLeast(0L)) } catch (e: Exception) { }
+            player.release()
+        }
+    }
 
     Box(Modifier.fillMaxSize().background(Color.Black)) {
         AndroidView(

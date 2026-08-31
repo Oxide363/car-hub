@@ -1,12 +1,15 @@
 package com.carhub
 
+import android.Manifest
 import android.media.AudioManager
+import android.os.Build
 import android.os.Bundle
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.compose.runtime.LaunchedEffect
+import androidx.core.app.ActivityCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.carhub.security.Kiosk
 import com.carhub.ui.CarHubShell
@@ -22,6 +25,15 @@ class MainActivity : ComponentActivity() {
         // Stay awake in the car; route hardware volume keys to media stream.
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         volumeControlStream = AudioManager.STREAM_MUSIC
+
+        // Best-effort: needed only to show Bluetooth status in the cluster.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            try {
+                ActivityCompat.requestPermissions(
+                    this, arrayOf(Manifest.permission.BLUETOOTH_CONNECT), 1
+                )
+            } catch (e: Exception) { }
+        }
 
         setContent {
             CarHubTheme {

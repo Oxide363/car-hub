@@ -40,9 +40,7 @@ class MainActivity : ComponentActivity() {
                 val vm: MainViewModel = viewModel()
                 when {
                     !vm.loaded -> SplashScreen()
-                    !vm.hasPin || !vm.hasPattern -> PinSetupScreen(
-                        onComplete = { pin, pattern -> vm.setupPin(pin); vm.setupPattern(pattern) }
-                    )
+                    !vm.hasPin -> PinSetupScreen(onComplete = { vm.setupPin(it) })
                     else -> {
                         LaunchedEffect(vm.mode) {
                             if (vm.mode == Mode.PASSENGER) Kiosk.startLock(this@MainActivity)
@@ -68,7 +66,6 @@ class MainActivity : ComponentActivity() {
                             ExitGate(
                                 lockedSeconds = vm.lockRemainingSec(),
                                 verifyPin = { vm.verifyPin(it) },
-                                verifyPattern = { vm.verifyPattern(it) },
                                 onSuccess = { vm.exitPassenger() },
                                 onCancel = { vm.askExitPin = false }
                             )

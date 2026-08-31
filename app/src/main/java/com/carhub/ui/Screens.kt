@@ -1174,11 +1174,9 @@ private fun PatternLock(title: String, error: String?, onPattern: (List<Int>) ->
 fun ExitGate(
     lockedSeconds: Long,
     verifyPin: suspend (String) -> Boolean,
-    verifyPattern: suspend (List<Int>) -> Boolean,
     onSuccess: () -> Unit,
     onCancel: () -> Unit
 ) {
-    var step by remember { mutableStateOf(0) }
     var err by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
     Box(Modifier.fillMaxSize().background(CH.Bg), contentAlignment = Alignment.Center) {
@@ -1191,14 +1189,10 @@ fun ExitGate(
                 Spacer(Modifier.height(20.dp))
                 Button(onClick = onCancel, colors = btnPlain()) { Text("Back") }
             }
-        } else if (step == 0) {
-            PinPad("Enter Owner PIN", err, "Next", onSubmit = { pin ->
-                scope.launch { if (verifyPin(pin)) { err = null; step = 1 } else err = "Incorrect PIN" }
-            }, onCancel = onCancel)
         } else {
-            PatternLock("Draw your unlock pattern", err, onPattern = { seq ->
-                scope.launch { if (verifyPattern(seq)) onSuccess() else err = "Pattern doesn't match" }
-            }, onCancel = { step = 0; err = null })
+            PinPad("Enter Owner PIN to exit", err, "Unlock", onSubmit = { pin ->
+                scope.launch { if (verifyPin(pin)) onSuccess() else err = "Incorrect PIN" }
+            }, onCancel = onCancel)
         }
     }
 }
@@ -1231,34 +1225,25 @@ fun SplashScreen() {
 }
 
 @Composable
-fun PinSetupScreen(onComplete: (String, List<Int>) -> Unit) {
+fun PinSetupScreen(onComplete: (String) -> Unit) {
     var step by remember { mutableStateOf(0) }
     var pin1 by remember { mutableStateOf("") }
-    var pat1 by remember { mutableStateOf<List<Int>>(emptyList()) }
     var err by remember { mutableStateOf<String?>(null) }
     Box(Modifier.fillMaxSize().background(CH.Bg), contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text("Set up Car Hub", color = CH.TextPrimary, fontSize = 26.sp, fontWeight = FontWeight.Bold)
-            Text("Step ${step + 1} of 4", color = CH.TextSecondary, fontSize = 13.sp)
+            Text("Create an Owner PIN to lock Passenger Mode.", color = CH.TextSecondary, fontSize = 13.sp)
             Spacer(Modifier.height(20.dp))
-            when (step) {
-                0 -> PinPad(
+            if (step == 0) {
+                PinPad(
                     "Create a PIN (4–8 digits)", err, "Next",
                     onSubmit = { pin1 = it; err = null; step = 1 }, onCancel = null
                 )
-                1 -> PinPad(
-                    "Confirm your PIN", err, "Next",
-                    onSubmit = { if (it == pin1) { err = null; step = 2 } else err = "PINs don't match" },
+            } else {
+                PinPad(
+                    "Confirm your PIN", err, "Create",
+                    onSubmit = { if (it == pin1) onComplete(pin1) else err = "PINs don't match" },
                     onCancel = { step = 0; err = null }
-                )
-                2 -> PatternLock(
-                    "Draw an unlock pattern (4+ dots)", err,
-                    onPattern = { pat1 = it; err = null; step = 3 }, onCancel = null
-                )
-                else -> PatternLock(
-                    "Draw the pattern again", err,
-                    onPattern = { if (it == pat1) onComplete(pin1, pat1) else err = "Patterns don't match" },
-                    onCancel = { step = 2; err = null }
                 )
             }
         }

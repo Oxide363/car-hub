@@ -81,6 +81,26 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.common.MediaItem
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
+import androidx.media3.common.C
+import androidx.media3.common.MimeTypes
+import androidx.media3.common.PlaybackException
+import androidx.media3.common.Player
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.IntentFilter
+import android.os.BatteryManager
+import androidx.core.content.ContextCompat
+import androidx.compose.foundation.Image
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.produceState
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.material.icons.filled.BatteryFull
+import androidx.compose.material.icons.filled.Bolt
+import com.carhub.data.Thumbs
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 import com.carhub.MainViewModel
 import com.carhub.Mode
 import com.carhub.Section
@@ -244,9 +264,67 @@ private fun RailItem(vm: MainViewModel, s: Section, icon: ImageVector, label: St
 // ---------- Home ----------
 
 @Composable
+private fun StatusCluster() {
+    val context = LocalContext.current
+    var pct by remember { mutableStateOf<Int?>(null) }
+    var charging by remember { mutableStateOf(false) }
+    var clock by remember { mutableStateOf("") }
+
+    DisposableEffect(Unit) {
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(c: Context?, i: android.content.Intent?) {
+                if (i == null) return
+                val level = i.getIntExtra(BatteryManager.EXTRA_LEVEL, -1)
+                val scale = i.getIntExtra(BatteryManager.EXTRA_SCALE, -1)
+                if (level >= 0 && scale > 0) pct = level * 100 / scale
+                val status = i.getIntExtra(BatteryManager.EXTRA_STATUS, -1)
+                charging = status == BatteryManager.BATTERY_STATUS_CHARGING ||
+                    status == BatteryManager.BATTERY_STATUS_FULL
+            }
+        }
+        ContextCompat.registerReceiver(
+            context, receiver, IntentFilter(android.content.Intent.ACTION_BATTERY_CHANGED),
+            ContextCompat.RECEIVER_NOT_EXPORTED
+        )
+        onDispose { try { context.unregisterReceiver(receiver) } catch (e: Exception) { } }
+    }
+    LaunchedEffect(Unit) {
+        while (true) {
+            val cal = java.util.Calendar.getInstance()
+            var h = cal.get(java.util.Calendar.HOUR)
+            if (h == 0) h = 12
+            val m = cal.get(java.util.Calendar.MINUTE).toString().padStart(2, '0')
+            val ap = if (cal.get(java.util.Calendar.AM_PM) == 0) "AM" else "PM"
+            clock = "$h:$m $ap"
+            delay(15000)
+        }
+    }
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+        if (clock.isNotEmpty()) Text(clock, color = CH.TextSecondary, fontSize = 14.sp)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(
+                if (charging) Icons.Filled.Bolt else Icons.Filled.BatteryFull, null,
+                tint = if (charging) CH.Accent else CH.TextSecondary, modifier = Modifier.size(20.dp)
+            )
+            Spacer(Modifier.width(4.dp))
+            Text(pct?.let { "$it%" } ?: "--", color = CH.TextSecondary, fontSize = 14.sp)
+        }
+    }
+}
+
+@Composable
 private fun HomeSection(vm: MainViewModel) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-        TopBar("CAR HUB", onBack = null)
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                "CAR HUB", color = CH.TextPrimary, fontSize = 22.sp, fontWeight = FontWeight.Bold,
+                letterSpacing = 1.sp, modifier = Modifier.weight(1f)
+            )
+            StatusCluster()
+        }
         Column(Modifier.padding(20.dp)) {
             Text(
                 if (vm.mode == Mode.PASSENGER) "Enjoy the ride" else "Welcome",
@@ -394,7 +472,16 @@ private fun CategoryTabs(cats: List<String>, selected: String, onSelect: (String
 }
 
 @Composable
+private fun rememberThumb(entry: MediaEntry): ImageBitmap? {
+    val context = LocalContext.current
+    return produceState<ImageBitmap?>(initialValue = Thumbs.cached(entry.uri), entry.uri) {
+        if (value == null) value = withContext(Dispatchers.IO) { Thumbs.load(context, entry) }
+    }.value
+}
+
+@Composable
 private fun PosterCard(m: MediaEntry, onClick: () -> Unit) {
+    val thumb = rememberThumb(m)
     Column(Modifier.clickable { onClick() }) {
         val g = posterGradients[(m.title.hashCode() and 0x7FFFFFFF) % posterGradients.size]
         Box(
@@ -403,10 +490,26 @@ private fun PosterCard(m: MediaEntry, onClick: () -> Unit) {
                 .background(Brush.linearGradient(g)),
             contentAlignment = Alignment.Center
         ) {
-            Icon(
-                Icons.Filled.Movie, null, tint = Color.White.copy(alpha = 0.25f),
-                modifier = Modifier.size(48.dp)
-            )
+            if (thumb != null) {
+                Image(
+                    bitmap = thumb, contentDescription = m.title,
+                    contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize()
+                )
+            } else {
+                Icon(
+                    Icons.Filled.Movie, null, tint = Color.White.copy(alpha = 0.25f),
+                    modifier = Modifier.size(48.dp)
+                )
+            }
+            if (m.isMultiPart) {
+                Box(
+                    Modifier.align(Alignment.TopEnd).padding(6.dp)
+                        .clip(RoundedCornerShape(6.dp)).background(Color(0xCC000000))
+                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                ) {
+                    Text("${m.partUris.size} parts", color = Color.White, fontSize = 11.sp)
+                }
+            }
         }
         Spacer(Modifier.height(8.dp))
         Text(
@@ -449,7 +552,20 @@ private fun MusicSection(vm: MainViewModel) {
                             }.padding(horizontal = 20.dp, vertical = 14.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Icon(Icons.Filled.MusicNote, null, tint = CH.Accent, modifier = Modifier.size(24.dp))
+                            val art = rememberThumb(s)
+                            Box(
+                                Modifier.size(44.dp).clip(RoundedCornerShape(8.dp)).background(CH.CardAlt),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                if (art != null) {
+                                    Image(
+                                        bitmap = art, contentDescription = null,
+                                        contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize()
+                                    )
+                                } else {
+                                    Icon(Icons.Filled.MusicNote, null, tint = CH.Accent, modifier = Modifier.size(22.dp))
+                                }
+                            }
                             Spacer(Modifier.width(16.dp))
                             Column(Modifier.weight(1f)) {
                                 Text(s.title, color = CH.TextPrimary, fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -492,9 +608,27 @@ private fun MusicSection(vm: MainViewModel) {
 @Composable
 private fun PlayerOverlay(m: MediaEntry, onClose: () -> Unit) {
     val context = LocalContext.current
+    var error by remember { mutableStateOf<String?>(null) }
     val player = remember {
         ExoPlayer.Builder(context).build().apply {
-            setMediaItem(MediaItem.fromUri(Uri.parse(m.uri)))
+            val items = m.playUris.mapIndexed { i, u ->
+                val b = MediaItem.Builder().setUri(Uri.parse(u))
+                if (i == 0 && m.subtitleUri != null) {
+                    val cfg = MediaItem.SubtitleConfiguration.Builder(Uri.parse(m.subtitleUri))
+                        .setMimeType(subMime(m.subtitleExt))
+                        .setLanguage("und")
+                        .setSelectionFlags(C.SELECTION_FLAG_DEFAULT)
+                        .build()
+                    b.setSubtitleConfigurations(listOf(cfg))
+                }
+                b.build()
+            }
+            setMediaItems(items)
+            addListener(object : Player.Listener {
+                override fun onPlayerError(e: PlaybackException) {
+                    error = "This file's format isn't supported on this device."
+                }
+            })
             prepare()
             playWhenReady = true
         }
@@ -512,9 +646,40 @@ private fun PlayerOverlay(m: MediaEntry, onClose: () -> Unit) {
                 modifier = Modifier.size(30.dp).clickable { onClose() }
             )
             Spacer(Modifier.width(16.dp))
-            Text(m.title, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            Text(
+                m.title + if (m.isMultiPart) "  (${m.partUris.size} parts)" else "",
+                color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold
+            )
+        }
+        if (error != null) {
+            Box(
+                Modifier.fillMaxSize().background(Color(0xE6000000)),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.padding(32.dp)
+                ) {
+                    Icon(Icons.Filled.Movie, null, tint = CH.TextSecondary, modifier = Modifier.size(48.dp))
+                    Spacer(Modifier.height(12.dp))
+                    Text(error!!, color = CH.TextPrimary, fontSize = 18.sp, textAlign = TextAlign.Center)
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        "Try an MP4/H.264 version, or a different file.",
+                        color = CH.TextSecondary, fontSize = 14.sp, textAlign = TextAlign.Center
+                    )
+                    Spacer(Modifier.height(20.dp))
+                    Button(onClick = { onClose() }, colors = btnAccent()) { Text("Back") }
+                }
+            }
         }
     }
+}
+
+private fun subMime(ext: String?): String = when (ext?.lowercase()) {
+    "vtt" -> MimeTypes.TEXT_VTT
+    "ass", "ssa" -> MimeTypes.TEXT_SSA
+    else -> MimeTypes.APPLICATION_SUBRIP
 }
 
 // ---------- Games ----------

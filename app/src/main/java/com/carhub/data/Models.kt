@@ -7,8 +7,16 @@ data class MediaEntry(
     val name: String,
     val type: MediaType,
     val folder: String,      // relative path inside CARHUB, e.g. "Movies/Telugu"
-    val durationMs: Long = 0L
+    val durationMs: Long = 0L,
+    val subtitleUri: String? = null,   // sidecar .srt/.vtt/.ass next to a video
+    val subtitleExt: String? = null,
+    val partUris: List<String> = emptyList()  // >1 => multi-part movie, played as a queue
 ) {
+    /** URIs to play, in order (single file, or all parts of a multi-part movie). */
+    val playUris: List<String> get() = if (partUris.isEmpty()) listOf(uri) else partUris
+
+    val isMultiPart: Boolean get() = partUris.size > 1
+
     /** Display title without file extension. */
     val title: String get() = name.substringBeforeLast('.', name)
 

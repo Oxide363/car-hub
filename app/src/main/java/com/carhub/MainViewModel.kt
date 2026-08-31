@@ -25,7 +25,7 @@ import java.security.MessageDigest
 
 enum class Mode { OWNER, PASSENGER }
 
-enum class Section { HOME, MOVIES, MUSIC, GAMES, MAPS, KIDS, CONTENT, SETTINGS }
+enum class Section { HOME, MOVIES, MUSIC, GAMES, KIDS, CONTENT, SETTINGS }
 
 class MainViewModel(app: Application) : AndroidViewModel(app) {
 

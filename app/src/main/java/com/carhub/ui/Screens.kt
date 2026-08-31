@@ -34,7 +34,6 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ChildCare
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Pause
@@ -233,7 +232,6 @@ fun CarHubShell(vm: MainViewModel) {
                         Section.MOVIES -> MoviesSection(vm)
                         Section.MUSIC -> MusicSection(vm)
                         Section.GAMES -> GamesSection(vm)
-                        Section.MAPS -> MapsSection(vm)
                         Section.KIDS -> KidsSection(vm)
                         Section.CONTENT -> ContentSection(vm)
                         Section.SETTINGS -> SettingsSection(vm)
@@ -303,7 +301,6 @@ private fun CarHubRail(vm: MainViewModel) {
         RailItem(vm, Section.MOVIES, Icons.Filled.Movie, "Movies")
         RailItem(vm, Section.MUSIC, Icons.Filled.MusicNote, "Music")
         RailItem(vm, Section.GAMES, Icons.Filled.SportsEsports, "Games")
-        RailItem(vm, Section.MAPS, Icons.Filled.Map, "Maps")
         Spacer(Modifier.weight(1f))
         if (vm.mode == Mode.OWNER) {
             NavigationRailItem(
@@ -428,8 +425,7 @@ private fun HomeSection(vm: MainViewModel) {
                 HomeTile("Movies", Icons.Filled.Movie, Section.MOVIES, tileGradients[0]),
                 HomeTile("Music", Icons.Filled.MusicNote, Section.MUSIC, tileGradients[1]),
                 HomeTile("Games", Icons.Filled.SportsEsports, Section.GAMES, tileGradients[2]),
-                HomeTile("Maps", Icons.Filled.Map, Section.MAPS, tileGradients[3]),
-                HomeTile("Kids", Icons.Filled.ChildCare, Section.KIDS, tileGradients[4])
+                HomeTile("Kids", Icons.Filled.ChildCare, Section.KIDS, tileGradients[3])
             )
             tiles.chunked(3).forEach { row ->
                 Row(
@@ -865,21 +861,6 @@ private fun TicTacToe() {
 }
 
 // ---------- Maps / Kids placeholders ----------
-
-@Composable
-private fun MapsSection(vm: MainViewModel) {
-    Column(Modifier.fillMaxSize()) {
-        TopBar("MAPS", onBack = { vm.go(Section.HOME) })
-        Box(Modifier.weight(1f).fillMaxWidth()) {
-            val n = vm.mapRegions.size
-            EmptyBox(
-                "Offline maps are a planned add-on for a future update.\n\n" +
-                    if (n > 0) "Detected $n offline map file(s) in CARHUB/Maps — they'll light up when Maps ships."
-                    else "Drop OpenStreetMap .map files in CARHUB/Maps and they'll be ready when Maps ships."
-            )
-        }
-    }
-}
 
 @Composable
 private fun KidsSection(vm: MainViewModel) {

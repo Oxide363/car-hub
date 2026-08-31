@@ -1,91 +1,105 @@
-# Car Hub — v0.1 (walking skeleton)
+# Car Hub
 
-Offline-first in-car entertainment for Android. This is the first installable build:
-Home + navigation rail, Owner PIN, CARHUB folder picker (SD-card isolation via Storage
-Access Framework), local **movie** and **music** playback, a built-in **game**
-(Tic-Tac-Toe), and a screen-pinning **Passenger Mode**. Maps and Kids are placeholders
-for the next build.
+Offline-first, in-car entertainment for Android. One APK, one-time setup, ₹0 running
+cost, no cloud, no accounts, no ads, no tracking. Everything plays from a folder you
+choose; the app declares **no INTERNET permission**.
 
-**No internet, no accounts, no cloud, no ads.** The app declares *no* INTERNET permission.
-
----
-
-## How to get the APK
-
-You cannot build an APK without an Android toolchain (Java + Android SDK). Pick ONE route.
-
-### Route A — Build in the cloud with GitHub Actions (no installs on your PC)
-
-1. Create a free account at github.com.
-2. Create a new repository (e.g. `car-hub`). **Public** is simplest and free.
-3. Upload **the contents of this `CarHub/` folder** to the repo:
-   - On the repo page: **Add file → Upload files**, then drag in everything inside
-     `CarHub/` (including the hidden `.github` folder — if drag-and-drop hides it,
-     use **Add file → Create new file** and type `.github/workflows/build.yml`,
-     pasting the contents of that file).
-   - Commit.
-4. GitHub automatically runs the build. Open the **Actions** tab → the latest run.
-5. When it finishes (green tick), scroll to **Artifacts** → download **CarHub-APK**.
-   Unzip it to get `app-debug.apk`.
-6. Put that APK on the tablet (Google Drive / email / USB) and install it (see below).
-
-> The build uses free GitHub-hosted runners. Internet is used only for this one-time
-> build — the installed app runs fully offline.
-
-### Route B — Build on a personal PC with Android Studio
-
-1. Install **Android Studio** (free) on your home PC.
-2. **Open** this `CarHub/` folder. Let Gradle sync (it downloads dependencies once and
-   creates the Gradle wrapper automatically).
-3. **Build → Build Bundle(s) / APK(s) → Build APK(s)**.
-4. Click **locate** in the popup to find `app/build/outputs/apk/debug/app-debug.apk`.
-5. Transfer to the tablet and install.
+> Build the app in the cloud (free) or on a PC, copy the APK to the device, and use it
+> fully offline forever.
 
 ---
 
-## Installing on the tablet (no ADB, no cable needed)
+## What's in the current build (v0.2b-ui)
 
-1. Copy `app-debug.apk` onto the tablet.
-2. Tap it. Android will ask to allow installs from this source → enable
-   **"Install unknown apps"** for your file manager/browser, then install.
+**Experience**
+- Cinematic dark UI with a glass navigation rail, animated splash, brand play-mark
+  logo, gradient feature tiles, and a custom gradient app icon
+- Landscape + portrait (auto-rotate)
+- Battery %/charging, Bluetooth state, and a clock in the home status cluster
+
+**Movies**
+- Poster grid with **real thumbnails extracted from each video**
+- Category tabs (from your folders), search, **Favorites**, **Continue Watching**
+  (resumes where you left off)
+- **Multi-part movies** (`Movie.part1.mkv` + `Movie.part2.mkv`, or CD1/CD2) are grouped
+  and played back-to-back as one film
+- **Subtitles**: drop `Movie.srt`/`.vtt`/`.ass` next to the video, or pick an embedded
+  track from the player's CC button
+- Clear "format not supported" message instead of a black screen when a codec is missing
+
+**Music**
+- Album art from file tags, browse + search, keeps playing across screens with a
+  now-playing bar
+
+**Games**
+- Built-in offline Tic-Tac-Toe (no network, no ads, no accounts)
+
+**Owner / Passenger**
+- Owner PIN, one-time **CARHUB folder** pick via Storage Access Framework (only that
+  folder is ever indexed — SD-card/personal files stay private)
+- Passenger Mode locks into Car Hub via Android screen pinning
+- Owner Content Manager (counts, rescan)
+
+**Security**
+- `allowBackup=false`, least-privilege manifest, local-only state
+
+### In progress (other work stream)
+- Exit hardening: corner lock (long-press) → PIN keypad → **pattern** (no biometric)
+- **Kids Mode** (owner picks kid-safe folders)
+- **Offline Maps** (in-app OSM via Mapsforge/MapLibre — view + position first)
+- Security hardening pass: salted + stretched PIN/pattern with lockout
+
+---
+
+## Get the APK (no tools on your PC)
+
+**Cloud build via GitHub Actions (recommended)**
+1. The project lives in a GitHub repo with `.github/workflows/build.yml`.
+2. Every push builds automatically. Open the repo's **Actions** tab.
+3. Click the latest successful run → scroll to **Artifacts** → download **CarHub-APK**.
+4. Unzip it → `app-debug.apk` is inside. (GitHub always wraps artifacts in a `.zip`;
+   the real installer is the `.apk` inside — extract, don't rename.)
+
+**Or build on a personal PC**
+- Install Android Studio (free) → Open this folder → **Build ▸ Build APK(s)**.
+- Output: `app/build/outputs/apk/debug/app-debug.apk`.
+
+## Install on the phone/tablet (no ADB, no cable)
+1. Copy `app-debug.apk` to the device (Drive / email / USB).
+2. Tap it → allow **"Install unknown apps"** for your file manager → **Install**.
 3. Open **Car Hub**.
 
-## First-time setup (owner)
-
+## First-time setup
 1. Create an **Owner PIN**.
-2. **Owner → Manage Content → Select CARHUB folder** and pick (or create) a folder,
-   e.g. `Internal storage/CARHUB` or `SD card/CARHUB`.
-3. Put media inside it, for example:
+2. **Owner → Manage Content → Select CARHUB folder**, e.g. `Internal storage/CARHUB`.
+3. Add media, for example:
    ```
    CARHUB/Movies/Telugu/MyMovie.mp4
+   CARHUB/Movies/Telugu/MyMovie.srt      (optional subtitles)
    CARHUB/Music/Telugu/Song.mp3
    ```
-4. Back in Manage Content, tap **Rescan**. Movies/Music now appear.
+4. Back in Manage Content → **Rescan**.
 
-## Using Passenger Mode
-
-- Owner Home → **Start Passenger Mode**. The app pins itself (screen pinning).
-- For a real lock, enable Android's **"Ask for PIN before unpinning"**
-  (Settings → Security → App pinning). Then leaving Car Hub needs the device lock.
-- To exit inside the app: rail → **Exit** → enter Owner PIN.
+## Passenger Mode (locking passengers in)
+- Owner Home → **Start Passenger Mode**.
+- For a real lock on a normal device, first enable Android's
+  **Settings → Security → App pinning**, and turn on **"Ask for PIN before unpinning"**.
+- Exit: the corner lock → Owner PIN (pattern step is being added).
 
 ---
 
-## Honest limitations of v0.1
-
-- **Lockdown is Tier B** (screen pinning), because the device is not provisioned as
-  Device Owner. The app shows its tier in Owner → Settings. Full escape-proof kiosk
-  (Tier A) needs one-time Device Owner provisioning (factory-fresh device + ADB/QR).
-- **Codecs are device-dependent.** H.264/AAC in MP4 is safest. HEVC/MKV depends on the
-  tablet's hardware decoders.
-- **Metadata scan** reads durations file-by-file; very large libraries scan slowly.
-  Background indexing + a Room database come in v0.2.
-- Music stops when you leave the Music screen (background playback service is v0.2).
-- Posters are generated placeholders (real thumbnail extraction is v0.2).
-- **Maps** and **Kids** are placeholders in this build.
+## Honest limitations
+- **Lockdown is Tier B** (screen pinning) unless the device is provisioned as **Device
+  Owner** (Tier A — needs a factory-fresh device + one-time ADB/QR). The app shows its
+  tier in Owner → Settings and never claims a stronger lock than it has.
+- **Codec support is device-dependent.** H.264/AAC in MP4 and MP3 play everywhere;
+  HEVC/H.265 and some MKV audio depend on the device's decoders.
+- **Offline routing/navigation** (turn-by-turn) is the hardest zero-cost piece and is
+  planned after offline map viewing + positioning.
+- Very large libraries scan more slowly (metadata is read per file); background indexing
+  is a later improvement.
 
 ## Tech
-
-Kotlin · Jetpack Compose (Material3) · Media3/ExoPlayer · DataStore · Storage Access
-Framework · DevicePolicyManager/Lock Task. Single module `:app`.
-minSdk 26 · targetSdk 34 · Gradle 8.9 · AGP 8.5.2 · Kotlin 2.0.21.
+Kotlin · Jetpack Compose (Material3) · Media3/ExoPlayer · Storage Access Framework ·
+DataStore · DevicePolicyManager/Lock Task. minSdk 26 · targetSdk 34 · Gradle 8.9 ·
+AGP 8.5.2 · Kotlin 2.0.21. No backend, no analytics, no third-party trackers.

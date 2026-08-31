@@ -10,6 +10,8 @@ import androidx.lifecycle.viewModelScope
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
+import com.carhub.data.IndexResult
+import com.carhub.data.MapRegion
 import com.carhub.data.MediaEntry
 import com.carhub.data.MediaIndexer
 import com.carhub.data.MediaType
@@ -37,6 +39,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     var tier by mutableStateOf("B"); private set
     var treeUri by mutableStateOf<String?>(null); private set
     var media by mutableStateOf<List<MediaEntry>>(emptyList()); private set
+    var mapRegions by mutableStateOf<List<MapRegion>>(emptyList()); private set
     var indexing by mutableStateOf(false); private set
 
     var section by mutableStateOf(Section.HOME)
@@ -160,10 +163,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private fun reindex(uriStr: String) {
         viewModelScope.launch {
             indexing = true
-            media = withContext(Dispatchers.IO) {
+            val result = withContext(Dispatchers.IO) {
                 try { MediaIndexer.index(getApplication(), Uri.parse(uriStr)) }
-                catch (e: Exception) { emptyList() }
+                catch (e: Exception) { IndexResult(emptyList(), emptyList()) }
             }
+            media = result.media
+            mapRegions = result.maps
             indexing = false
             refreshContinue()
         }

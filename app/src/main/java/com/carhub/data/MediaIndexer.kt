@@ -25,12 +25,13 @@ object MediaIndexer {
         val noExt: String get() = name.substringBeforeLast('.', name)
     }
 
-    fun index(context: Context, treeUri: Uri): List<MediaEntry> {
-        val root = DocumentFile.fromTreeUri(context, treeUri) ?: return emptyList()
+    fun index(context: Context, treeUri: Uri): IndexResult {
+        val root = DocumentFile.fromTreeUri(context, treeUri) ?: return IndexResult(emptyList(), emptyList())
         val videos = ArrayList<Raw>()
         val audios = ArrayList<Raw>()
         val subs = HashMap<String, Pair<String, String>>() // "folder|basename" -> (uri, ext)
-        walk(root, "", videos, audios, subs)
+        val maps = ArrayList<MapRegion>()
+        walk(root, "", videos, audios, subs, maps)
 
         val out = ArrayList<MediaEntry>()
 
@@ -45,20 +46,23 @@ object MediaIndexer {
 
         groupVideos(context, videos, subs, out)
 
-        return out.sortedWith(compareBy({ it.folder }, { it.title.lowercase() }))
+        return IndexResult(
+            out.sortedWith(compareBy({ it.folder }, { it.title.lowercase() })),
+            maps.sortedBy { it.name.lowercase() }
+        )
     }
 
     private fun walk(
         dir: DocumentFile, path: String,
         videos: MutableList<Raw>, audios: MutableList<Raw>,
-        subs: MutableMap<String, Pair<String, String>>
+        subs: MutableMap<String, Pair<String, String>>, maps: MutableList<MapRegion>
     ) {
         val children = try { dir.listFiles() } catch (e: Exception) { return }
         for (f in children) {
             val name = f.name ?: continue
             if (f.isDirectory) {
                 val next = if (path.isEmpty()) name else "$path/$name"
-                walk(f, next, videos, audios, subs)
+                walk(f, next, videos, audios, subs, maps)
             } else {
                 val ext = name.substringAfterLast('.', "").lowercase()
                 when {
@@ -68,6 +72,7 @@ object MediaIndexer {
                         val base = name.substringBeforeLast('.', name).lowercase()
                         subs["$path|$base"] = f.uri.toString() to ext
                     }
+                    ext == "map" -> maps.add(MapRegion(name.substringBeforeLast('.', name), f.uri.toString()))
                 }
             }
         }

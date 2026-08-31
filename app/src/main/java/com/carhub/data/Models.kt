@@ -2,6 +2,12 @@ package com.carhub.data
 
 enum class MediaType { VIDEO, AUDIO }
 
+/** An offline map region file (Mapsforge .map) found in the CARHUB folder. */
+data class MapRegion(val name: String, val uri: String)
+
+/** Result of one library scan: playable media plus any offline map regions. */
+data class IndexResult(val media: List<MediaEntry>, val maps: List<MapRegion>)
+
 data class MediaEntry(
     val uri: String,
     val name: String,

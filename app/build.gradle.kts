@@ -12,8 +12,8 @@ android {
         applicationId = "com.carhub"
         minSdk = 26
         targetSdk = 34
-        versionCode = 5
-        versionName = "0.2b"
+        versionCode = 6
+        versionName = "0.3"
     }
 
     buildFeatures {
@@ -58,4 +58,7 @@ dependencies {
 
     implementation("androidx.media3:media3-exoplayer:1.4.1")
     implementation("androidx.media3:media3-ui:1.4.1")
+
+    // Offline OpenStreetMap rendering (vector .map files, fully offline).
+    implementation("org.mapsforge:mapsforge-map-android:0.21.0")
 }
